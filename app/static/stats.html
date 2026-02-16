@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stats</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="page page-stats">
+    <header class="header">
+      <h1>HorseEdge AU</h1>
+      <p>Track intelligence, historical bias, and performance leaderboards.</p>
+    </header>
+    <nav class="top-toggle" aria-label="View toggle">
+      <a href="/" class="toggle-link">Race Board</a>
+      <a href="/tips" class="toggle-link">Daily Tips</a>
+      <a href="/my-bets" class="toggle-link">My Bets</a>
+      <a href="/stats" class="toggle-link active">Stats</a>
+      <a href="/settings" class="toggle-link">Settings</a>
+    </nav>
+
+    <section class="panel controls">
+      <div class="row">
+        <label for="trackFilter">Track Filter</label>
+        <select id="trackFilter"></select>
+      </div>
+      <div class="row actions">
+        <button id="refreshStats">Refresh Stats</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Track Information</h2>
+      <table id="trackSummaryTable">
+        <thead>
+          <tr>
+            <th>Track</th>
+            <th>Races</th>
+            <th>Avg Starters</th>
+            <th>Avg Prize Pool</th>
+            <th>Good %</th>
+            <th>Soft %</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Historical Barrier Bias</h2>
+      <table id="barrierBiasTable">
+        <thead>
+          <tr>
+            <th>Track</th>
+            <th>Barrier Bucket</th>
+            <th>Runs</th>
+            <th>Wins</th>
+            <th>Strike %</th>
+            <th>Avg Finish</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Jockey Information</h2>
+      <table id="jockeyTable">
+        <thead>
+          <tr>
+            <th>Jockey</th>
+            <th>Runs</th>
+            <th>Wins</th>
+            <th>Strike %</th>
+            <th>Top 3 %</th>
+            <th>Profit (u)</th>
+            <th>ROI %</th>
+            <th>Fav Runs</th>
+            <th>Fav SR %</th>
+            <th>Fav ROI %</th>
+            <th>Avg Finish</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Trainer Information</h2>
+      <table id="trainerTable">
+        <thead>
+          <tr>
+            <th>Trainer</th>
+            <th>Runs</th>
+            <th>Wins</th>
+            <th>Strike %</th>
+            <th>Top 3 %</th>
+            <th>Profit (u)</th>
+            <th>ROI %</th>
+            <th>Fav Runs</th>
+            <th>Fav SR %</th>
+            <th>Fav ROI %</th>
+            <th>Avg Finish</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Leaderboards</h2>
+      <div class="stats-grid">
+        <div>
+          <h3>Top Jockeys</h3>
+          <table id="leaderJockeyTable">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Wins</th>
+                <th>Runs</th>
+                <th>Strike %</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div>
+          <h3>Top Trainers</h3>
+          <table id="leaderTrainerTable">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Wins</th>
+                <th>Runs</th>
+                <th>Strike %</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="/static/stats.js"></script>
+</body>
+</html>

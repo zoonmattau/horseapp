@@ -1,13 +1,23 @@
 const betsBody = document.querySelector("#betsTable tbody");
 const analyticsPanel = document.getElementById("analyticsPanel");
 const toggleAnalyticsBtn = document.getElementById("toggleAnalytics");
+const rangeFilter = document.getElementById("rangeFilter");
+const betsTotals = document.getElementById("betsTotals");
 const metricsBody = document.querySelector("#metricsTable tbody");
 const bookmakerGraph = document.getElementById("bookmakerGraph");
 const trackGraph = document.getElementById("trackGraph");
 const edgeGraph = document.getElementById("edgeGraph");
 const recentGraph = document.getElementById("recentGraph");
+const editBetModal = document.getElementById("editBetModal");
+const editBetModalMeta = document.getElementById("editBetModalMeta");
+const editBetOdds = document.getElementById("editBetOdds");
+const editBetStake = document.getElementById("editBetStake");
+const editBetSave = document.getElementById("editBetSave");
+const editBetCancel = document.getElementById("editBetCancel");
 
 let currentBets = [];
+let currentFilteredBets = [];
+let pendingEditBet = null;
 
 async function jsonFetch(url, options = {}) {
   const res = await fetch(url, options);
@@ -19,6 +29,47 @@ function edgeClass(value) {
   if (value > 0) return "edge-positive";
   if (value < 0) return "edge-negative";
   return "edge-neutral";
+}
+
+function startOfDay(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function profitLossForBet(bet) {
+  const stake = impliedStake(bet);
+  const odds = Number(bet.odds_at_tip || 0);
+  if (bet.result === "won") return stake * (odds - 1);
+  if (bet.result === "lost") return -stake;
+  return 0;
+}
+
+function formatProfitLoss(value, withUnit = true) {
+  const sign = value > 0 ? "+" : "";
+  const suffix = withUnit ? "u" : "";
+  return `${sign}${value.toFixed(2)}${suffix}`;
+}
+
+function filterBetsByRange(bets, range) {
+  if (range === "all") return [...bets];
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(todayStart.getDate() + 1);
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(todayStart.getDate() - 1);
+  const weekStart = new Date(todayStart);
+  weekStart.setDate(todayStart.getDate() - 6);
+  const monthStart = new Date(todayStart);
+  monthStart.setDate(todayStart.getDate() - 29);
+
+  return bets.filter((b) => {
+    const t = new Date(b.tracked_at);
+    if (range === "today") return t >= todayStart && t < tomorrowStart;
+    if (range === "yesterday") return t >= yesterdayStart && t < todayStart;
+    if (range === "week") return t >= weekStart && t < tomorrowStart;
+    if (range === "month") return t >= monthStart && t < tomorrowStart;
+    return true;
+  });
 }
 
 function impliedStake(b) {
@@ -212,9 +263,69 @@ async function setResult(betId, result) {
   await loadBets();
 }
 
+async function updateBetDetails(betId, oddsAtTip, stake) {
+  const params = new URLSearchParams({
+    odds_at_tip: String(oddsAtTip),
+    stake: String(stake),
+  });
+  await jsonFetch(`/api/tips/tracked/${betId}/update?${params.toString()}`, { method: "POST" });
+  await loadBets();
+}
+
+async function deleteBet(betId) {
+  await jsonFetch(`/api/tips/tracked/${betId}`, { method: "DELETE" });
+  await loadBets();
+}
+
+function openEditModal(bet) {
+  pendingEditBet = bet;
+  if (editBetModalMeta) {
+    editBetModalMeta.textContent = `${bet.track} R${bet.race_number} - ${bet.horse_name}`;
+  }
+  if (editBetOdds) editBetOdds.value = Number(bet.odds_at_tip || 0).toFixed(2);
+  if (editBetStake) editBetStake.value = Number(bet.stake || 0).toFixed(2);
+  editBetModal?.classList.remove("hidden");
+}
+
+function closeEditModal() {
+  editBetModal?.classList.add("hidden");
+  pendingEditBet = null;
+}
+
+async function saveEditModal() {
+  if (!pendingEditBet) return;
+  const odds = Number(editBetOdds?.value || "0");
+  const stake = Number(editBetStake?.value || "0");
+  if (odds <= 1) {
+    alert("Odds must be greater than 1.0");
+    return;
+  }
+  if (stake < 0) {
+    alert("Stake must be non-negative");
+    return;
+  }
+  await updateBetDetails(pendingEditBet.id, odds, stake);
+  closeEditModal();
+}
+
+function renderTotals(bets) {
+  if (!betsTotals) return;
+  const settled = settledBets(bets);
+  const totalPnl = settled.reduce((acc, b) => acc + profitLossForBet(b), 0);
+  const won = settled.filter((b) => b.result === "won").length;
+  const lost = settled.filter((b) => b.result === "lost").length;
+  betsTotals.innerHTML = `
+    <div>Filtered bets: <strong>${bets.length}</strong></div>
+    <div>Settled: <strong>${settled.length}</strong> (W ${won} / L ${lost})</div>
+    <div>Total P/L: <strong class="${edgeClass(totalPnl)}">${formatProfitLoss(totalPnl)}</strong></div>
+  `;
+}
+
 function renderLog(bets) {
   betsBody.innerHTML = "";
   for (const b of bets) {
+    const stake = impliedStake(b);
+    const pl = profitLossForBet(b);
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${new Date(b.tracked_at).toLocaleString()}</td>
@@ -223,7 +334,9 @@ function renderLog(bets) {
       <td>${b.horse_name}</td>
       <td>${b.bookmaker}</td>
       <td>$${Number(b.odds_at_tip).toFixed(2)}</td>
+      <td>${stake.toFixed(2)}u</td>
       <td class="${edgeClass(Number(b.edge_pct))}">${Number(b.edge_pct).toFixed(2)}%</td>
+      <td class="${b.result === "pending" ? "edge-neutral" : edgeClass(pl)}">${b.result === "pending" ? "-" : formatProfitLoss(pl)}</td>
       <td>
         <select data-result="1">
           <option value="pending" ${b.result === "pending" ? "selected" : ""}>pending</option>
@@ -231,20 +344,44 @@ function renderLog(bets) {
           <option value="lost" ${b.result === "lost" ? "selected" : ""}>lost</option>
         </select>
       </td>
+      <td class="bets-actions-cell">
+        <button data-edit="1">Edit</button>
+        <button data-delete="1">Delete</button>
+      </td>
     `;
     tr.querySelector("select[data-result='1']").addEventListener("change", async (e) => {
       await setResult(b.id, e.target.value);
     });
+    tr.querySelector("button[data-edit='1']").addEventListener("click", () => {
+      openEditModal(b);
+    });
+    tr.querySelector("button[data-delete='1']").addEventListener("click", async () => {
+      const ok = confirm(`Delete bet for ${b.horse_name}?`);
+      if (!ok) return;
+      await deleteBet(b.id);
+    });
     betsBody.appendChild(tr);
   }
+  if (!bets.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="11" class="edge-neutral">No bets for selected range.</td>`;
+    betsBody.appendChild(tr);
+  }
+}
+
+function applyFiltersAndRender() {
+  const range = rangeFilter?.value || "all";
+  currentFilteredBets = filterBetsByRange(currentBets, range);
+  renderTotals(currentFilteredBets);
+  renderLog(currentFilteredBets);
+  renderMetricsTable(currentFilteredBets);
+  renderGraphs(currentFilteredBets);
 }
 
 async function loadBets() {
   const data = await jsonFetch("/api/user/bets");
   currentBets = data.bets || [];
-  renderLog(currentBets);
-  renderMetricsTable(currentBets);
-  renderGraphs(currentBets);
+  applyFiltersAndRender();
 }
 
 toggleAnalyticsBtn.addEventListener("click", () => {
@@ -256,6 +393,13 @@ toggleAnalyticsBtn.addEventListener("click", () => {
     analyticsPanel.setAttribute("hidden", "");
     toggleAnalyticsBtn.textContent = "Show Analytics";
   }
+});
+
+rangeFilter?.addEventListener("change", applyFiltersAndRender);
+editBetSave?.addEventListener("click", saveEditModal);
+editBetCancel?.addEventListener("click", closeEditModal);
+editBetModal?.addEventListener("click", (e) => {
+  if (e.target === editBetModal) closeEditModal();
 });
 
 loadBets().catch((err) => {

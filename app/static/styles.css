@@ -79,22 +79,32 @@ body {
   gap: 14px;
 }
 
-.board-layout {
+.board-top {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) clamp(220px, 18vw, 280px);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
   min-width: 0;
 }
 
-.board-main {
+.board-left {
   display: grid;
   gap: 14px;
   min-width: 0;
 }
 
-.board-layout > * {
+.board-top > * {
   min-width: 0;
+}
+
+.board-left .panel,
+.board-bottom .panel {
+  overflow-x: auto;
+}
+
+.board-bottom {
+  display: grid;
+  gap: 14px;
 }
 
 .header {
@@ -183,6 +193,46 @@ body {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 8px;
+}
+
+.bets-log-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bets-log-actions label {
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.bets-log-actions select {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 10px;
+  font-family: var(--mono);
+}
+
+.bets-totals {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.bets-actions-cell {
+  display: flex;
+  gap: 6px;
+}
+
+.bets-actions-cell button {
+  padding: 4px 8px;
+  border-radius: 7px;
 }
 
 .legend {
@@ -385,6 +435,11 @@ tbody tr:hover td {
   background: #faf9f4;
 }
 
+.summary-row td {
+  background: #f6f3ea !important;
+  border-top: 2px solid var(--line);
+}
+
 tr.details-row td {
   background: #f8fbfc;
 }
@@ -478,14 +533,17 @@ tr.details-row td {
 
 .betslip-float {
   width: 100%;
+  height: 100%;
   max-height: none;
-  overflow: visible;
+  overflow: hidden;
   border: 1px solid var(--slip-border);
   border-radius: 14px;
   background: var(--slip-bg);
   color: var(--slip-text);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
   position: static;
+  display: flex;
+  flex-direction: column;
 }
 
 .betslip-head {
@@ -516,6 +574,27 @@ tr.details-row td {
   padding: 10px;
   display: grid;
   gap: 8px;
+  overflow: auto;
+  flex: 1 1 0;
+  min-height: 120px;
+  max-height: none;
+}
+
+.betslip-subhead {
+  padding: 8px 10px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--slip-muted);
+  border-top: 1px solid var(--slip-head-border);
+  flex: 0 0 auto;
+}
+
+.betslip-scroll-hint {
+  padding: 6px 10px 10px;
+  font-size: 11px;
+  color: var(--slip-muted);
+  text-align: center;
 }
 
 .betslip-summary {
@@ -555,6 +634,21 @@ tr.details-row td {
 .betslip-empty {
   font-size: 13px;
   color: var(--slip-muted);
+}
+
+.betslip-actions {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.betslip-icon-btn {
+  padding: 4px 7px;
+  border-radius: 7px;
+  border: 1px solid var(--slip-item-border);
+  color: var(--slip-text);
+  background: transparent;
 }
 
 .modal {
@@ -627,15 +721,20 @@ tr.details-row td {
     text-align: left;
   }
 
+  .bets-log-actions {
+    width: 100%;
+  }
+
   .race-meta {
     grid-template-columns: 1fr 1fr;
   }
 
-  .board-layout {
+  .board-top {
     grid-template-columns: 1fr;
   }
 
   .betslip-float {
     width: 100%;
+    height: auto;
   }
 }

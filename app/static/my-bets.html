@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260216d" />
 </head>
 <body>
   <main class="page page-bets">
@@ -19,14 +19,26 @@
       <a href="/" class="toggle-link">Race Board</a>
       <a href="/tips" class="toggle-link">Daily Tips</a>
       <a href="/my-bets" class="toggle-link active">My Bets</a>
+      <a href="/stats" class="toggle-link">Stats</a>
       <a href="/settings" class="toggle-link">Settings</a>
     </nav>
 
     <section class="panel">
       <div class="panel-head">
         <h2>Bet Log</h2>
-        <button id="toggleAnalytics">Show Analytics</button>
+        <div class="bets-log-actions">
+          <label for="rangeFilter">Range</label>
+          <select id="rangeFilter">
+            <option value="all">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="week">Last 7 Days</option>
+            <option value="month">Last 30 Days</option>
+          </select>
+          <button id="toggleAnalytics">Show Analytics</button>
+        </div>
       </div>
+      <div id="betsTotals" class="bets-totals"></div>
       <table id="betsTable">
         <thead>
           <tr>
@@ -36,8 +48,11 @@
             <th>Horse</th>
             <th>Book</th>
             <th>Odds</th>
+            <th>Stake</th>
             <th>Edge %</th>
+            <th>P/L</th>
             <th>Result</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -75,6 +90,25 @@
       </details>
     </section>
   </main>
-  <script src="/static/my-bets.js"></script>
+
+  <div id="editBetModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="editBetModalTitle">
+    <div class="modal-card">
+      <h3 id="editBetModalTitle">Edit Bet</h3>
+      <div id="editBetModalMeta" class="modal-meta"></div>
+      <div class="row">
+        <label for="editBetOdds">Odds</label>
+        <input id="editBetOdds" type="number" step="0.01" min="1.01" />
+      </div>
+      <div class="row">
+        <label for="editBetStake">Stake (units)</label>
+        <input id="editBetStake" type="number" step="0.01" min="0" />
+      </div>
+      <div class="row actions">
+        <button id="editBetSave">Save</button>
+        <button id="editBetCancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <script src="/static/my-bets.js?v=20260216d"></script>
 </body>
 </html>

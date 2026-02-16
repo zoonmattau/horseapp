@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Bets</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="page page-bets">
+    <header class="header">
+      <h1>HorseEdge AU</h1>
+      <p>Track all of your saved bets and outcomes.</p>
+    </header>
+    <nav class="top-toggle" aria-label="View toggle">
+      <a href="/" class="toggle-link">Race Board</a>
+      <a href="/tips" class="toggle-link">Daily Tips</a>
+      <a href="/my-bets" class="toggle-link active">My Bets</a>
+      <a href="/settings" class="toggle-link">Settings</a>
+    </nav>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Bet Log</h2>
+        <button id="toggleAnalytics">Show Analytics</button>
+      </div>
+      <table id="betsTable">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Track</th>
+            <th>Race</th>
+            <th>Horse</th>
+            <th>Book</th>
+            <th>Odds</th>
+            <th>Edge %</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="analyticsPanel" class="panel" hidden>
+      <h2>Bet Analytics</h2>
+
+      <details open>
+        <summary>Core Metrics</summary>
+        <table id="metricsTable">
+          <tbody></tbody>
+        </table>
+      </details>
+
+      <details open>
+        <summary>Profit by Bookmaker</summary>
+        <div id="bookmakerGraph" class="graph-list"></div>
+      </details>
+
+      <details>
+        <summary>Profit by Track</summary>
+        <div id="trackGraph" class="graph-list"></div>
+      </details>
+
+      <details>
+        <summary>Edge Bucket Distribution</summary>
+        <div id="edgeGraph" class="graph-list"></div>
+      </details>
+
+      <details>
+        <summary>Recent 30 Bet Outcomes</summary>
+        <div id="recentGraph" class="graph-list"></div>
+      </details>
+    </section>
+  </main>
+  <script src="/static/my-bets.js"></script>
+</body>
+</html>

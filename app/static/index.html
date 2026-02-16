@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AU Horse Tips MVP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="page page-board">
+    <header class="header">
+      <h1>HorseEdge AU</h1>
+      <p>Live race matrix, market edge board, and runner-level drill-down.</p>
+    </header>
+    <nav class="top-toggle" aria-label="View toggle">
+      <a href="/" class="toggle-link active">Race Board</a>
+      <a href="/tips" class="toggle-link">Daily Tips</a>
+      <a href="/my-bets" class="toggle-link">My Bets</a>
+      <a href="/settings" class="toggle-link">Settings</a>
+    </nav>
+    <div class="board-layout">
+      <div class="board-main">
+        <section class="panel controls">
+          <div class="row">
+            <label for="raceDate">Date</label>
+            <input id="raceDate" type="date" />
+          </div>
+          <div class="row stretch">
+            <label>Bookmakers</label>
+            <div class="books-actions">
+              <button id="selectAllBooks">Select all</button>
+              <button id="clearAllBooks">Clear all</button>
+            </div>
+            <div id="books" class="books"></div>
+          </div>
+          <div class="row actions">
+            <button id="refreshTips">Refresh board</button>
+            <button id="simulateMove">Simulate selected race odds move</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Race Matrix</h2>
+            <div class="legend"><span class="matrix-tip-icon"></span> Recommended bet exists</div>
+          </div>
+          <div id="matrixWrap"></div>
+        </section>
+
+        <section class="panel">
+          <h2 id="selectedRaceTitle">Race Details</h2>
+          <div id="raceMeta" class="race-meta">
+            <div><span class="meta-label">Race Name</span><span id="raceMetaName">-</span></div>
+            <div><span class="meta-label">Starters</span><span id="raceMetaStarters">-</span></div>
+            <div><span class="meta-label">Prize Pool</span><span id="raceMetaPrize">-</span></div>
+            <div><span class="meta-label">Track Rating</span><span id="raceMetaRating">-</span></div>
+            <div><span class="meta-label">Jump (Local)</span><span id="raceMetaJumpLocal">-</span></div>
+            <div><span class="meta-label">Time to Jump</span><span id="raceMetaToJump">-</span></div>
+          </div>
+          <table id="tipsTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Barrier</th>
+                <th>Horse</th>
+                <th>Trainer</th>
+                <th>Jockey</th>
+                <th>Predicted Price</th>
+                <th>Market Odds</th>
+                <th>Best</th>
+                <th>Race %</th>
+                <th>Pred Price %</th>
+                <th>Edge %</th>
+                <th>Bet</th>
+                <th>Track</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+
+        <section class="panel">
+          <h2>Tracked Tips</h2>
+          <table id="trackedTable">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Race</th>
+                <th>Horse</th>
+                <th>Book</th>
+                <th>Edge %</th>
+                <th>Odds</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+      </div>
+      <aside id="betSlip" class="betslip-float panel" aria-live="polite">
+        <div class="betslip-head">
+          <strong>Bet Slip</strong>
+          <span id="betSlipCount">0</span>
+        </div>
+        <div id="betSlipSummary" class="betslip-summary"></div>
+        <div id="betSlipList" class="betslip-list"></div>
+      </aside>
+    </div>
+  </main>
+
+  <div id="trackModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="trackModalTitle">
+    <div class="modal-card">
+      <h3 id="trackModalTitle">Track Bet</h3>
+      <div id="trackModalMeta" class="modal-meta"></div>
+      <div class="row">
+        <label for="modalOdds">Exact Odds</label>
+        <input id="modalOdds" type="number" step="0.01" min="1.01" />
+      </div>
+      <div class="row">
+        <label for="modalStake">Stake (units)</label>
+        <input id="modalStake" type="number" step="0.01" min="0" />
+      </div>
+      <div class="row actions">
+        <button id="modalSave">Save Bet</button>
+        <button id="modalCancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

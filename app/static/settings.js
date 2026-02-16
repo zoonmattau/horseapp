@@ -30,22 +30,28 @@ async function loadSettings() {
 }
 
 async function saveProfile() {
-  const params = new URLSearchParams({
-    display_name: displayNameInput.value.trim(),
-    email: emailInput.value.trim(),
+  await jsonFetch("/api/user/profile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      display_name: displayNameInput.value.trim(),
+      email: emailInput.value.trim(),
+    }),
   });
-  await jsonFetch(`/api/user/profile?${params.toString()}`, { method: "POST" });
   alert("Profile saved.");
 }
 
 async function saveSettings() {
-  const params = new URLSearchParams({
-    timezone: timezoneInput.value.trim() || "Australia/Sydney",
-    default_min_edge: String(Number(defaultMinEdgeInput.value || "1")),
-    notifications_enabled: String(Number(notificationsEnabledInput.value || "1")),
-    notify_min_edge: String(Number(notifyMinEdgeInput.value || "1")),
+  await jsonFetch("/api/user/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      timezone: timezoneInput.value.trim() || "Australia/Sydney",
+      default_min_edge: Number(defaultMinEdgeInput.value || "1"),
+      notifications_enabled: Number(notificationsEnabledInput.value || "1"),
+      notify_min_edge: Number(notifyMinEdgeInput.value || "1"),
+    }),
   });
-  await jsonFetch(`/api/user/settings?${params.toString()}`, { method: "POST" });
   alert("Settings saved.");
 }
 

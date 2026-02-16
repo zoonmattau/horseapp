@@ -61,15 +61,18 @@ async function saveTrackedBetFromModal() {
     return;
   }
 
-  const params = new URLSearchParams({
-    race_id: String(pendingTrackPayload.race_id),
-    runner_id: String(pendingTrackPayload.runner_id),
-    bookmaker: pendingTrackPayload.bookmaker,
-    edge_pct: String(pendingTrackPayload.edge_pct),
-    odds_at_tip: String(odds),
-    stake: String(stake),
+  await jsonFetch("/api/tips/track", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      race_id: pendingTrackPayload.race_id,
+      runner_id: pendingTrackPayload.runner_id,
+      bookmaker: pendingTrackPayload.bookmaker,
+      edge_pct: pendingTrackPayload.edge_pct,
+      odds_at_tip: odds,
+      stake,
+    }),
   });
-  await jsonFetch(`/api/tips/track?${params.toString()}`, { method: "POST" });
   closeTrackModal();
 }
 
@@ -116,27 +119,38 @@ async function loadDailyTips() {
   timeSortHeader.textContent = `Jump Time ${timeSortAsc ? "ASC" : "DESC"}`;
   tipsBody.innerHTML = "";
   tips.forEach((tip) => {
-    const edgeClass = Number(tip.edge_pct) > 0
+    const edgeCls = Number(tip.edge_pct) > 0
       ? "edge-positive"
       : Number(tip.edge_pct) < 0
         ? "edge-negative"
         : "edge-neutral";
+    const form = tip.form_last5 || "-";
+    let formHtml = "";
+    for (let i = 0; i < form.length; i++) {
+      const ch = form[i];
+      if (i === 0 && ch === "1") formHtml += `<span class="form-first-win">${ch}</span>`;
+      else if (i === 0 && parseInt(ch) >= 4) formHtml += `<span class="form-first-bad">${ch}</span>`;
+      else formHtml += ch;
+    }
+    if (!form || form === "-") formHtml = "-";
+    const trainerSr = tip.trainer_strike_pct ? ` <span class="strike-rate">(${tip.trainer_strike_pct}%)</span>` : "";
+    const jockeySr = tip.jockey_strike_pct ? ` <span class="strike-rate">(${tip.jockey_strike_pct}%)</span>` : "";
     const tr = document.createElement("tr");
+    if (Number(tip.edge_pct) > 5) tr.className = "row-value-strong";
     tr.innerHTML = `
       <td>${tip.track}</td>
       <td>R${tip.race_number}</td>
       <td>${tip.jump_time || "-"}</td>
       <td>${tip.horse_number}</td>
-      <td>${tip.barrier}</td>
       <td>${tip.horse_name}</td>
-      <td>${tip.trainer}</td>
-      <td>${tip.jockey}</td>
-      <td>$${Number(tip.predicted_price).toFixed(2)}</td>
+      <td><span class="form-string">${formHtml}</span></td>
+      <td>${tip.trainer}${trainerSr}</td>
+      <td>${tip.jockey}${jockeySr}</td>
       <td>$${Number(tip.market_odds).toFixed(2)}</td>
       <td>${tip.best_book_symbol}</td>
-      <td class="${edgeClass}">${Number(tip.edge_pct).toFixed(2)}%</td>
+      <td class="${edgeCls}">${Number(tip.edge_pct).toFixed(2)}%</td>
       <td><a href="${tip.bet_url}" target="_blank" rel="noreferrer">Bet</a></td>
-      <td><button data-track-bet="1">Track</button></td>
+      <td><button data-track-bet="1">+ Slip</button></td>
     `;
     tr.querySelector("button[data-track-bet='1']").addEventListener("click", () => {
       openTrackModal({

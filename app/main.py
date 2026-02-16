@@ -1,17 +1,30 @@
 import random
 import sqlite3
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = BASE_DIR.parent
-DB_PATH = PROJECT_DIR / "horse.db"
 STATIC_DIR = BASE_DIR / "static"
+
+
+def resolve_db_path() -> Path:
+    db_value = os.getenv("HORSE_DB_PATH", "horse.db").strip()
+    db_path = Path(db_value)
+    if not db_path.is_absolute():
+        db_path = PROJECT_DIR / db_path
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    return db_path
+
+
+DB_PATH = resolve_db_path()
 
 BOOKMAKERS = ["sportsbet", "ladbrokes", "tab", "neds", "pointsbet"]
 BOOK_SYMBOLS = {
@@ -99,12 +112,44 @@ app = FastAPI(title="Horse Tips MVP", version="0.1.0")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+class TrackTipRequest(BaseModel):
+    race_id: int
+    runner_id: int
+    bookmaker: str
+    edge_pct: float
+    odds_at_tip: float
+    stake: float = 0.0
+
+
+class UpdateTrackedTipRequest(BaseModel):
+    odds_at_tip: float
+    stake: float
+
+
+class UpdateUserProfileRequest(BaseModel):
+    display_name: str
+    email: str
+
+
+class UpdateUserSettingsRequest(BaseModel):
+    timezone: str
+    default_min_edge: float
+    notifications_enabled: int
+    notify_min_edge: float
+
+
+class UpdateBetResultRequest(BaseModel):
+    result: Literal["pending", "won", "lost"]
+
+
 def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
-    # Reduce locking/journal issues on some Windows mapped drives.
-    conn.execute("PRAGMA journal_mode=OFF;")
-    conn.execute("PRAGMA synchronous=OFF;")
+    # Safer defaults for concurrent local development sessions.
+    conn.execute("PRAGMA foreign_keys=ON;")
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA busy_timeout=10000;")
     conn.execute("PRAGMA temp_store=MEMORY;")
     return conn
 
@@ -479,8 +524,9 @@ def seed_dummy_data() -> None:
                     runner_id = cur.lastrowid
 
                     for book in BOOKMAKERS:
-                        book_margin = rng.uniform(0.05, 0.11)
-                        noise = rng.uniform(-0.05, 0.09)
+                        # Use stronger dummy overround so combined book % is realistically >100.
+                        book_margin = rng.uniform(0.14, 0.24)
+                        noise = rng.uniform(-0.03, 0.02)
                         odds = max(1.2, round(predicted_price * (1 - book_margin + noise), 2))
                         bet_url = f"https://example.com/bet/{book}/{race_id}/{runner_id}"
                         cur.execute(
@@ -690,8 +736,9 @@ def rebalance_dummy_odds() -> None:
         """
     ).fetchall()
     for row in rows:
-        book_margin = rng.uniform(0.05, 0.11)
-        noise = rng.uniform(-0.05, 0.09)
+        # Keep legacy DB rows aligned with stronger overround assumptions.
+        book_margin = rng.uniform(0.14, 0.24)
+        noise = rng.uniform(-0.03, 0.02)
         odds = max(1.2, round(row["predicted_price"] * (1 - book_margin + noise), 2))
         cur.execute(
             "UPDATE odds SET current_odds = ?, updated_at = ? WHERE id = ?",
@@ -728,6 +775,11 @@ def settings_page() -> FileResponse:
 @app.get("/my-bets")
 def my_bets_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "my-bets.html")
+
+
+@app.get("/stats")
+def stats_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "stats.html")
 
 
 @app.get("/api/bookmakers")
@@ -821,11 +873,12 @@ def get_race_board(
           AND o.bookmaker IN ({placeholders})
     """
     rows = conn.execute(query, [race_id, *selected_books]).fetchall()
-    conn.close()
 
     by_runner = {}
+    raw_model_prob = {}
     for row in rows:
         rid = row["runner_id"]
+        raw_model_prob[rid] = float(row["model_prob"] or 0.0)
         candidate = by_runner.get(rid)
         if candidate is None or row["current_odds"] > candidate["market_odds"]:
             market_odds = round(row["current_odds"], 2)
@@ -843,20 +896,78 @@ def get_race_board(
                 "bet_url": row["bet_url"],
             }
 
-    probs = normalized_probs_from_prices(
-        {rid: item["predicted_price"] for rid, item in by_runner.items()}
-    )
+    model_total = sum(raw_model_prob.values()) or 1.0
+    race_probs = {rid: (raw_model_prob.get(rid, 0.0) / model_total) for rid in by_runner.keys()}
     for rid, item in by_runner.items():
-        model_prob = probs.get(rid, 0.0)
+        model_prob = race_probs.get(rid, 0.0)
         item["model_prob_pct"] = round(model_prob * 100.0, 2)
-        item["predicted_price_pct"] = round((1.0 / max(item["predicted_price"], 1.01)) * 100.0, 2)
+        item["bookmaker_pct"] = round((1.0 / max(item["market_odds"], 1.01)) * 100.0, 2)
         item["edge_pct"] = round(calc_edge_pct(model_prob, item["market_odds"]), 2)
+
+    # Compute form string (last 5 finishes) for each runner
+    runner_ids_list = list(by_runner.keys())
+    if runner_ids_list:
+        ph = ",".join("?" for _ in runner_ids_list)
+        form_rows = conn.execute(
+            f"""
+            SELECT runner_id, finish_pos
+            FROM runner_history
+            WHERE runner_id IN ({ph})
+            ORDER BY runner_id, run_date DESC
+            """,
+            runner_ids_list,
+        ).fetchall()
+        form_map: dict[int, list[int]] = {}
+        for fr in form_rows:
+            rid = fr["runner_id"]
+            form_map.setdefault(rid, [])
+            if len(form_map[rid]) < 5:
+                form_map[rid].append(fr["finish_pos"])
+
+        jockey_names = list({item["jockey"] for item in by_runner.values()})
+        trainer_names = list({item["trainer"] for item in by_runner.values()})
+
+        jockey_sr: dict[str, float] = {}
+        if jockey_names:
+            jph = ",".join("?" for _ in jockey_names)
+            jrows = conn.execute(
+                f"SELECT jockey, COUNT(*) AS runs, SUM(CASE WHEN finish_pos = 1 THEN 1 ELSE 0 END) AS wins FROM jockey_history WHERE jockey IN ({jph}) GROUP BY jockey",
+                jockey_names,
+            ).fetchall()
+            for jr in jrows:
+                jockey_sr[jr["jockey"]] = round((jr["wins"] / max(jr["runs"], 1)) * 100.0, 1)
+
+        trainer_sr: dict[str, float] = {}
+        if trainer_names:
+            tph = ",".join("?" for _ in trainer_names)
+            trows = conn.execute(
+                f"SELECT trainer, COUNT(*) AS runs, SUM(CASE WHEN finish_pos = 1 THEN 1 ELSE 0 END) AS wins FROM trainer_history WHERE trainer IN ({tph}) GROUP BY trainer",
+                trainer_names,
+            ).fetchall()
+            for tr_row in trows:
+                trainer_sr[tr_row["trainer"]] = round((tr_row["wins"] / max(tr_row["runs"], 1)) * 100.0, 1)
+    else:
+        form_map = {}
+        jockey_sr = {}
+        trainer_sr = {}
+
+    conn.close()
+
+    for rid, item in by_runner.items():
+        positions = form_map.get(rid, [])
+        item["form_last5"] = "".join(str(p) if p < 10 else "x" for p in positions)
+        item["jockey_strike_pct"] = jockey_sr.get(item["jockey"], 0.0)
+        item["trainer_strike_pct"] = trainer_sr.get(item["trainer"], 0.0)
 
     board = list(by_runner.values())
     for item in board:
         item["qualifies"] = item["edge_pct"] >= min_edge
-    board.sort(key=lambda x: x["horse_number"])
-    return {"race": dict(race), "min_edge": min_edge, "selected_books": selected_books, "rows": board}
+    board.sort(key=lambda x: x["edge_pct"], reverse=True)
+    totals = {
+        "model_pct_total": round(sum(x["model_prob_pct"] for x in board), 2),
+        "bookmaker_pct_total": round(sum(x["bookmaker_pct"] for x in board), 2),
+    }
+    return {"race": dict(race), "min_edge": min_edge, "selected_books": selected_books, "rows": board, "totals": totals}
 
 
 @app.get("/api/race-signals")
@@ -958,12 +1069,42 @@ def get_daily_tips(
                     "bet_url": row["bet_url"],
                 }
 
+        # Form strings for runners in this race
+        race_runner_ids = list(by_runner.keys())
+        race_form_map: dict[int, list[int]] = {}
+        if race_runner_ids:
+            fph = ",".join("?" for _ in race_runner_ids)
+            frows = conn.execute(
+                f"SELECT runner_id, finish_pos FROM runner_history WHERE runner_id IN ({fph}) ORDER BY runner_id, run_date DESC",
+                race_runner_ids,
+            ).fetchall()
+            for fr in frows:
+                rid2 = fr["runner_id"]
+                race_form_map.setdefault(rid2, [])
+                if len(race_form_map[rid2]) < 5:
+                    race_form_map[rid2].append(fr["finish_pos"])
+
+        race_jockeys = list({item["jockey"] for item in by_runner.values()})
+        race_trainers = list({item["trainer"] for item in by_runner.values()})
+        jsr: dict[str, float] = {}
+        if race_jockeys:
+            jph2 = ",".join("?" for _ in race_jockeys)
+            for jr in conn.execute(f"SELECT jockey, COUNT(*) AS runs, SUM(CASE WHEN finish_pos = 1 THEN 1 ELSE 0 END) AS wins FROM jockey_history WHERE jockey IN ({jph2}) GROUP BY jockey", race_jockeys).fetchall():
+                jsr[jr["jockey"]] = round((jr["wins"] / max(jr["runs"], 1)) * 100.0, 1)
+        tsr: dict[str, float] = {}
+        if race_trainers:
+            tph2 = ",".join("?" for _ in race_trainers)
+            for tr2 in conn.execute(f"SELECT trainer, COUNT(*) AS runs, SUM(CASE WHEN finish_pos = 1 THEN 1 ELSE 0 END) AS wins FROM trainer_history WHERE trainer IN ({tph2}) GROUP BY trainer", race_trainers).fetchall():
+                tsr[tr2["trainer"]] = round((tr2["wins"] / max(tr2["runs"], 1)) * 100.0, 1)
+
         probs = normalized_probs_from_prices(
             {rid: item["predicted_price"] for rid, item in by_runner.items()}
         )
         for rid, item in by_runner.items():
             model_prob = probs.get(rid, 0.0)
             edge = round(calc_edge_pct(model_prob, item["market_odds"]), 2)
+            positions = race_form_map.get(rid, [])
+            form_str = "".join(str(p) if p < 10 else "x" for p in positions)
             if edge >= min_edge:
                 all_tips.append(
                     {
@@ -971,10 +1112,14 @@ def get_daily_tips(
                         "race_date": race["race_date"],
                         "track": race["track"],
                         "race_number": race["race_number"],
+                        "jump_time": race["jump_time"],
                         **item,
                         "model_prob_pct": round(model_prob * 100.0, 2),
-                        "predicted_price_pct": round((1.0 / max(item["predicted_price"], 1.01)) * 100.0, 2),
+                        "bookmaker_pct": round((1.0 / max(item["market_odds"], 1.01)) * 100.0, 2),
                         "edge_pct": edge,
+                        "form_last5": form_str,
+                        "jockey_strike_pct": jsr.get(item["jockey"], 0.0),
+                        "trainer_strike_pct": tsr.get(item["trainer"], 0.0),
                     }
                 )
 
@@ -1017,19 +1162,12 @@ def simulate_odds_move(race_id: int):
 
 
 @app.post("/api/tips/track")
-def track_tip(
-    race_id: int,
-    runner_id: int,
-    bookmaker: str,
-    edge_pct: float,
-    odds_at_tip: float,
-    stake: float = 0.0,
-):
-    if bookmaker not in BOOKMAKERS:
+def track_tip(payload: TrackTipRequest):
+    if payload.bookmaker not in BOOKMAKERS:
         raise HTTPException(status_code=400, detail="Unknown bookmaker.")
-    if odds_at_tip <= 1:
+    if payload.odds_at_tip <= 1:
         raise HTTPException(status_code=400, detail="Odds must be greater than 1.0")
-    if stake < 0:
+    if payload.stake < 0:
         raise HTTPException(status_code=400, detail="Stake must be non-negative")
 
     conn = get_conn()
@@ -1042,12 +1180,12 @@ def track_tip(
         """,
         (
             "demo",
-            race_id,
-            runner_id,
-            bookmaker,
-            edge_pct,
-            odds_at_tip,
-            stake,
+            payload.race_id,
+            payload.runner_id,
+            payload.bookmaker,
+            payload.edge_pct,
+            payload.odds_at_tip,
+            payload.stake,
             datetime.utcnow().isoformat(),
         ),
     )
@@ -1087,6 +1225,41 @@ def tracked_tips():
     return {"tips": [dict(r) for r in rows]}
 
 
+@app.post("/api/tips/tracked/{bet_id}/update")
+def update_tracked_tip(bet_id: int, payload: UpdateTrackedTipRequest):
+    if payload.odds_at_tip <= 1:
+        raise HTTPException(status_code=400, detail="Odds must be greater than 1.0")
+    if payload.stake < 0:
+        raise HTTPException(status_code=400, detail="Stake must be non-negative")
+    conn = get_conn()
+    conn.execute(
+        """
+        UPDATE tracked_tips
+        SET odds_at_tip = ?, stake = ?
+        WHERE id = ? AND user_id = 'demo'
+        """,
+        (payload.odds_at_tip, payload.stake, bet_id),
+    )
+    conn.commit()
+    conn.close()
+    return {"status": "ok"}
+
+
+@app.delete("/api/tips/tracked/{bet_id}")
+def delete_tracked_tip(bet_id: int):
+    conn = get_conn()
+    conn.execute(
+        """
+        DELETE FROM tracked_tips
+        WHERE id = ? AND user_id = 'demo'
+        """,
+        (bet_id,),
+    )
+    conn.commit()
+    conn.close()
+    return {"status": "ok"}
+
+
 @app.get("/api/user/profile")
 def get_user_profile():
     conn = get_conn()
@@ -1102,7 +1275,13 @@ def get_user_profile():
 
 
 @app.post("/api/user/profile")
-def update_user_profile(display_name: str, email: str):
+def update_user_profile(payload: UpdateUserProfileRequest):
+    display_name = payload.display_name.strip()
+    email = payload.email.strip()
+    if not display_name:
+        raise HTTPException(status_code=400, detail="Display name is required.")
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="A valid email is required.")
     conn = get_conn()
     now = datetime.utcnow().isoformat()
     conn.execute(
@@ -1136,12 +1315,13 @@ def get_user_settings():
 
 
 @app.post("/api/user/settings")
-def update_user_settings(
-    timezone: str,
-    default_min_edge: float,
-    notifications_enabled: int,
-    notify_min_edge: float,
-):
+def update_user_settings(payload: UpdateUserSettingsRequest):
+    timezone = payload.timezone.strip() or "Australia/Sydney"
+    default_min_edge = float(payload.default_min_edge)
+    notifications_enabled = int(payload.notifications_enabled)
+    notify_min_edge = float(payload.notify_min_edge)
+    if notifications_enabled not in {0, 1}:
+        raise HTTPException(status_code=400, detail="notifications_enabled must be 0 or 1.")
     conn = get_conn()
     now = datetime.utcnow().isoformat()
     conn.execute(
@@ -1193,10 +1373,199 @@ def get_user_bets():
     return {"bets": [dict(r) for r in rows]}
 
 
+@app.get("/api/stats/filters")
+def get_stats_filters():
+    conn = get_conn()
+    tracks = conn.execute(
+        """
+        SELECT DISTINCT track
+        FROM races
+        ORDER BY track
+        """
+    ).fetchall()
+    conn.close()
+    return {"tracks": [t["track"] for t in tracks]}
+
+
+@app.get("/api/stats/dashboard")
+def get_stats_dashboard(track: Optional[str] = Query(default=None)):
+    conn = get_conn()
+
+    if track:
+        track_filter = "WHERE ra.track = ?"
+        params = [track]
+    else:
+        track_filter = ""
+        params = []
+
+    track_summary = conn.execute(
+        f"""
+        SELECT
+          ra.track,
+          COUNT(DISTINCT ra.id) AS races,
+          ROUND(AVG(ra.starters), 2) AS avg_starters,
+          ROUND(AVG(ra.prize_pool), 2) AS avg_prize_pool,
+          ROUND(AVG(CASE WHEN ra.track_rating LIKE 'Good%' THEN 1.0 ELSE 0.0 END) * 100.0, 2) AS good_rate_pct,
+          ROUND(AVG(CASE WHEN ra.track_rating LIKE 'Soft%' THEN 1.0 ELSE 0.0 END) * 100.0, 2) AS soft_rate_pct
+        FROM races ra
+        {track_filter}
+        GROUP BY ra.track
+        ORDER BY races DESC, ra.track
+        """,
+        params,
+    ).fetchall()
+
+    if track:
+        bias_filter = "WHERE h.track = ?"
+        bias_params = [track]
+    else:
+        bias_filter = ""
+        bias_params = []
+
+    barrier_bias = conn.execute(
+        f"""
+        SELECT
+          h.track,
+          CASE
+            WHEN r.barrier BETWEEN 1 AND 4 THEN 'Low (1-4)'
+            WHEN r.barrier BETWEEN 5 AND 8 THEN 'Mid (5-8)'
+            ELSE 'High (9+)'
+          END AS barrier_bucket,
+          COUNT(*) AS runs,
+          SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) AS wins,
+          ROUND(AVG(h.finish_pos), 2) AS avg_finish_pos,
+          ROUND((SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS strike_rate_pct
+        FROM runner_history h
+        JOIN runners r ON r.id = h.runner_id
+        {bias_filter}
+        GROUP BY h.track, barrier_bucket
+        ORDER BY h.track, barrier_bucket
+        """,
+        bias_params,
+    ).fetchall()
+
+    jockey_stats = conn.execute(
+        """
+        SELECT
+          h.jockey,
+          COUNT(*) AS runs,
+          SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) AS wins,
+          ROUND(AVG(h.finish_pos), 2) AS avg_finish_pos,
+          ROUND((SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS strike_rate_pct,
+          ROUND((SUM(CASE WHEN h.finish_pos = 1 THEN h.starting_price ELSE 0 END) - COUNT(*)), 2) AS profit_units,
+          ROUND(((SUM(CASE WHEN h.finish_pos = 1 THEN h.starting_price ELSE 0 END) - COUNT(*)) * 100.0) / COUNT(*), 2) AS roi_pct,
+          ROUND((SUM(CASE WHEN h.finish_pos <= 3 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS top3_rate_pct,
+          SUM(CASE WHEN h.starting_price <= 3.0 THEN 1 ELSE 0 END) AS short_fav_runs,
+          SUM(CASE WHEN h.starting_price <= 3.0 AND h.finish_pos = 1 THEN 1 ELSE 0 END) AS short_fav_wins,
+          ROUND(
+            CASE
+              WHEN SUM(CASE WHEN h.starting_price <= 3.0 THEN 1 ELSE 0 END) = 0 THEN 0
+              ELSE (
+                SUM(CASE WHEN h.starting_price <= 3.0 AND h.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0
+              ) / SUM(CASE WHEN h.starting_price <= 3.0 THEN 1 ELSE 0 END)
+            END, 2
+          ) AS short_fav_sr_pct,
+          ROUND(
+            CASE
+              WHEN SUM(CASE WHEN h.starting_price <= 3.0 THEN 1 ELSE 0 END) = 0 THEN 0
+              ELSE (
+                (
+                  SUM(CASE WHEN h.starting_price <= 3.0 AND h.finish_pos = 1 THEN h.starting_price ELSE 0 END)
+                  - SUM(CASE WHEN h.starting_price <= 3.0 THEN 1 ELSE 0 END)
+                ) * 100.0
+              ) / SUM(CASE WHEN h.starting_price <= 3.0 THEN 1 ELSE 0 END)
+            END, 2
+          ) AS short_fav_roi_pct
+        FROM runner_history h
+        GROUP BY h.jockey
+        ORDER BY wins DESC, strike_rate_pct DESC
+        LIMIT 20
+        """
+    ).fetchall()
+
+    trainer_stats = conn.execute(
+        """
+        SELECT
+          t.trainer,
+          COUNT(*) AS runs,
+          SUM(CASE WHEN t.finish_pos = 1 THEN 1 ELSE 0 END) AS wins,
+          ROUND(AVG(t.finish_pos), 2) AS avg_finish_pos,
+          ROUND((SUM(CASE WHEN t.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS strike_rate_pct,
+          ROUND((SUM(CASE WHEN t.finish_pos = 1 THEN t.starting_price ELSE 0 END) - COUNT(*)), 2) AS profit_units,
+          ROUND(((SUM(CASE WHEN t.finish_pos = 1 THEN t.starting_price ELSE 0 END) - COUNT(*)) * 100.0) / COUNT(*), 2) AS roi_pct,
+          ROUND((SUM(CASE WHEN t.finish_pos <= 3 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS top3_rate_pct,
+          SUM(CASE WHEN t.starting_price <= 3.0 THEN 1 ELSE 0 END) AS short_fav_runs,
+          SUM(CASE WHEN t.starting_price <= 3.0 AND t.finish_pos = 1 THEN 1 ELSE 0 END) AS short_fav_wins,
+          ROUND(
+            CASE
+              WHEN SUM(CASE WHEN t.starting_price <= 3.0 THEN 1 ELSE 0 END) = 0 THEN 0
+              ELSE (
+                SUM(CASE WHEN t.starting_price <= 3.0 AND t.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0
+              ) / SUM(CASE WHEN t.starting_price <= 3.0 THEN 1 ELSE 0 END)
+            END, 2
+          ) AS short_fav_sr_pct,
+          ROUND(
+            CASE
+              WHEN SUM(CASE WHEN t.starting_price <= 3.0 THEN 1 ELSE 0 END) = 0 THEN 0
+              ELSE (
+                (
+                  SUM(CASE WHEN t.starting_price <= 3.0 AND t.finish_pos = 1 THEN t.starting_price ELSE 0 END)
+                  - SUM(CASE WHEN t.starting_price <= 3.0 THEN 1 ELSE 0 END)
+                ) * 100.0
+              ) / SUM(CASE WHEN t.starting_price <= 3.0 THEN 1 ELSE 0 END)
+            END, 2
+          ) AS short_fav_roi_pct
+        FROM trainer_history t
+        GROUP BY t.trainer
+        ORDER BY wins DESC, strike_rate_pct DESC
+        LIMIT 20
+        """
+    ).fetchall()
+
+    jockey_leaderboard = conn.execute(
+        """
+        SELECT
+          h.jockey AS name,
+          SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) AS wins,
+          COUNT(*) AS runs,
+          ROUND((SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS strike_rate_pct
+        FROM runner_history h
+        GROUP BY h.jockey
+        ORDER BY wins DESC, strike_rate_pct DESC
+        LIMIT 10
+        """
+    ).fetchall()
+
+    trainer_leaderboard = conn.execute(
+        """
+        SELECT
+          t.trainer AS name,
+          SUM(CASE WHEN t.finish_pos = 1 THEN 1 ELSE 0 END) AS wins,
+          COUNT(*) AS runs,
+          ROUND((SUM(CASE WHEN t.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS strike_rate_pct
+        FROM trainer_history t
+        GROUP BY t.trainer
+        ORDER BY wins DESC, strike_rate_pct DESC
+        LIMIT 10
+        """
+    ).fetchall()
+
+    conn.close()
+    return {
+        "track_filter": track,
+        "track_summary": [dict(r) for r in track_summary],
+        "barrier_bias": [dict(r) for r in barrier_bias],
+        "jockey_stats": [dict(r) for r in jockey_stats],
+        "trainer_stats": [dict(r) for r in trainer_stats],
+        "leaderboards": {
+            "jockeys": [dict(r) for r in jockey_leaderboard],
+            "trainers": [dict(r) for r in trainer_leaderboard],
+        },
+    }
+
+
 @app.post("/api/user/bets/{bet_id}/result")
-def update_bet_result(bet_id: int, result: str):
-    if result not in {"pending", "won", "lost"}:
-        raise HTTPException(status_code=400, detail="Invalid result.")
+def update_bet_result(bet_id: int, payload: UpdateBetResultRequest):
     conn = get_conn()
     conn.execute(
         """
@@ -1204,7 +1573,7 @@ def update_bet_result(bet_id: int, result: str):
         SET result = ?
         WHERE id = ? AND user_id = 'demo'
         """,
-        (result, bet_id),
+        (payload.result, bet_id),
     )
     conn.commit()
     conn.close()

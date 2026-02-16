@@ -54,9 +54,13 @@
       <aside id="betSlip" class="betslip-float panel" aria-live="polite">
         <div class="betslip-head">
           <strong>Bet Slip</strong>
-          <span id="betSlipCount">0</span>
+          <span style="display:flex;gap:6px;align-items:center">
+            <button id="betSlipClearAll" class="betslip-clear-btn">Clear All</button>
+            <span id="betSlipCount">0</span>
+          </span>
         </div>
         <div id="betSlipSummary" class="betslip-summary"></div>
+        <div id="betSlipPotential" class="betslip-summary" style="display:none"></div>
         <div class="betslip-subhead">Next to go</div>
         <div id="betSlipNext" class="betslip-list"></div>
         <div class="betslip-subhead">Completed</div>
@@ -75,23 +79,28 @@
           <div><span class="meta-label">Track Rating</span><span id="raceMetaRating">-</span></div>
           <div><span class="meta-label">Jump (Local)</span><span id="raceMetaJumpLocal">-</span></div>
           <div><span class="meta-label">Time to Jump</span><span id="raceMetaToJump">-</span></div>
+          <div><span class="meta-label">Overround</span><span id="raceMetaOverround">-</span></div>
+        </div>
+        <div style="margin-bottom:8px">
+          <button id="valueFilterBtn" class="value-filter-btn">Value bets only</button>
         </div>
         <table id="tipsTable">
           <thead>
             <tr>
               <th>#</th>
-              <th>Barrier</th>
+              <th class="col-barrier">Barrier</th>
               <th>Horse</th>
+              <th>Form</th>
               <th>Trainer</th>
               <th>Jockey</th>
-              <th>Predicted Price</th>
-              <th>Market Odds</th>
+              <th class="col-predicted">Pred. Price</th>
+              <th>Mkt Odds</th>
               <th>Best</th>
-              <th>Model %</th>
-              <th>Book %</th>
+              <th class="col-model">Model %</th>
+              <th class="col-book">Book %</th>
               <th>Edge %</th>
               <th>Bet</th>
-              <th>Track</th>
+              <th></th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -103,7 +112,7 @@
 
   <div id="trackModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="trackModalTitle">
     <div class="modal-card">
-      <h3 id="trackModalTitle">Track Bet</h3>
+      <h3 id="trackModalTitle">Add to Slip</h3>
       <div id="trackModalMeta" class="modal-meta"></div>
       <div class="row">
         <label for="modalOdds">Exact Odds</label>
@@ -120,6 +129,7 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=20260216c"></script>
+  <button class="mobile-slip-btn" id="mobileSlipBtn">Bet Slip</button>
+  <script src="/static/app.js?v=20260216d"></script>
 </body>
 </html>

@@ -258,17 +258,23 @@ function renderGraphs(bets) {
 }
 
 async function setResult(betId, result) {
-  const params = new URLSearchParams({ result });
-  await jsonFetch(`/api/user/bets/${betId}/result?${params.toString()}`, { method: "POST" });
+  await jsonFetch(`/api/user/bets/${betId}/result`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ result }),
+  });
   await loadBets();
 }
 
 async function updateBetDetails(betId, oddsAtTip, stake) {
-  const params = new URLSearchParams({
-    odds_at_tip: String(oddsAtTip),
-    stake: String(stake),
+  await jsonFetch(`/api/tips/tracked/${betId}/update`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      odds_at_tip: oddsAtTip,
+      stake,
+    }),
   });
-  await jsonFetch(`/api/tips/tracked/${betId}/update?${params.toString()}`, { method: "POST" });
   await loadBets();
 }
 

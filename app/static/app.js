@@ -10,11 +10,14 @@ const raceMetaPrize = document.getElementById("raceMetaPrize");
 const raceMetaRating = document.getElementById("raceMetaRating");
 const raceMetaJumpLocal = document.getElementById("raceMetaJumpLocal");
 const raceMetaToJump = document.getElementById("raceMetaToJump");
+const raceMetaOverround = document.getElementById("raceMetaOverround");
 const betSlipNext = document.getElementById("betSlipNext");
 const betSlipDone = document.getElementById("betSlipDone");
 const betSlipCount = document.getElementById("betSlipCount");
 const betSlipSummary = document.getElementById("betSlipSummary");
+const betSlipPotential = document.getElementById("betSlipPotential");
 const betSlipScrollHint = document.getElementById("betSlipScrollHint");
+const betSlipClearAll = document.getElementById("betSlipClearAll");
 const trackModal = document.getElementById("trackModal");
 const trackModalTitle = document.getElementById("trackModalTitle");
 const trackModalMeta = document.getElementById("trackModalMeta");
@@ -26,6 +29,8 @@ const refreshTipsBtn = document.getElementById("refreshTips");
 const simulateMoveBtn = document.getElementById("simulateMove");
 const selectAllBooksBtn = document.getElementById("selectAllBooks");
 const clearAllBooksBtn = document.getElementById("clearAllBooks");
+const valueFilterBtn = document.getElementById("valueFilterBtn");
+const mobileSlipBtn = document.getElementById("mobileSlipBtn");
 
 let bookmakers = [];
 let bookSymbol = {};
@@ -38,6 +43,8 @@ let trackedTipsCache = [];
 let pendingTrackPayload = null;
 let selectedRaceJumpIso = null;
 let selectedRaceHeaderMeta = null;
+let valueFilterActive = false;
+let lastBoardData = null;
 
 function syncThemeMode() {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -142,7 +149,7 @@ function renderSelectedRaceTitle() {
   const jumpPhrase = c === "jumped" ? "Jumped" : `${c} to jump`;
   selectedRaceTitle.textContent =
     `${selectedRaceHeaderMeta.track} R${selectedRaceHeaderMeta.race_number} ` +
-    `(${selectedRaceHeaderMeta.distance_m}m) • ${selectedRaceHeaderMeta.track_rating} • ${jumpPhrase}`;
+    `(${selectedRaceHeaderMeta.distance_m}m) \u2022 ${selectedRaceHeaderMeta.track_rating} \u2022 ${jumpPhrase}`;
 }
 
 function edgeClass(value) {
@@ -159,9 +166,25 @@ function profitLossUnits(bet) {
   return null;
 }
 
+function formatFormString(form) {
+  if (!form) return "-";
+  let html = "";
+  for (let i = 0; i < form.length; i++) {
+    const ch = form[i];
+    if (i === 0 && ch === "1") {
+      html += `<span class="form-first-win">${ch}</span>`;
+    } else if (i === 0 && parseInt(ch) >= 4) {
+      html += `<span class="form-first-bad">${ch}</span>`;
+    } else {
+      html += ch;
+    }
+  }
+  return html;
+}
+
 function openTrackModal(payload) {
   pendingTrackPayload = payload;
-  if (trackModalTitle) trackModalTitle.textContent = payload.mode === "edit" ? "Edit Tracked Bet" : "Track Bet";
+  if (trackModalTitle) trackModalTitle.textContent = payload.mode === "edit" ? "Edit Tracked Bet" : "Add to Slip";
   if (trackModalMeta) {
     trackModalMeta.textContent = `${payload.track || ""} R${payload.race_number || ""} - ${payload.horse_name || ""}`;
   }
@@ -188,21 +211,24 @@ async function saveTrackedBetFromModal() {
     return;
   }
   if (pendingTrackPayload.mode === "edit") {
-    const params = new URLSearchParams({
-      odds_at_tip: String(odds),
-      stake: String(stake),
+    await jsonFetch(`/api/tips/tracked/${pendingTrackPayload.bet_id}/update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ odds_at_tip: odds, stake: stake }),
     });
-    await jsonFetch(`/api/tips/tracked/${pendingTrackPayload.bet_id}/update?${params.toString()}`, { method: "POST" });
   } else {
-    const params = new URLSearchParams({
-      race_id: String(pendingTrackPayload.race_id),
-      runner_id: String(pendingTrackPayload.runner_id),
-      bookmaker: pendingTrackPayload.bookmaker,
-      edge_pct: String(pendingTrackPayload.edge_pct),
-      odds_at_tip: String(odds),
-      stake: String(stake),
+    await jsonFetch("/api/tips/track", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        race_id: pendingTrackPayload.race_id,
+        runner_id: pendingTrackPayload.runner_id,
+        bookmaker: pendingTrackPayload.bookmaker,
+        edge_pct: pendingTrackPayload.edge_pct,
+        odds_at_tip: odds,
+        stake: stake,
+      }),
     });
-    await jsonFetch(`/api/tips/track?${params.toString()}`, { method: "POST" });
   }
   closeTrackModal();
   await loadTracked();
@@ -292,10 +318,15 @@ function renderMatrix() {
         const selectedClass = String(selectedRaceId) === String(race.id) ? "selected" : "";
         const icon = signal.has_tip ? `<span class="matrix-tip-icon" title="${signal.tip_count} tip(s)"></span>` : "";
         const jump = toJumpCountdown(race.race_date, race.jump_time);
+        const edgeStr = signal.max_edge > 0 ? `<div class="matrix-edge ${edgeClass(signal.max_edge)}">+${signal.max_edge.toFixed(1)}%</div>` : "";
+        const tipsStr = signal.tip_count > 0 ? `<div class="matrix-tips">${signal.tip_count} tip${signal.tip_count > 1 ? "s" : ""}</div>` : "";
+        const edgeBorder = signal.max_edge > 5 ? "edge-strong" : signal.max_edge > 0 ? "edge-weak" : "";
         td.innerHTML = `
-          <button class="matrix-btn ${selectedClass}" data-race-id="${race.id}">
+          <button class="matrix-btn ${selectedClass} ${edgeBorder}" data-race-id="${race.id}">
             ${icon}
             <span class="matrix-time">${escapeHtml(jump)}</span>
+            ${edgeStr}
+            ${tipsStr}
           </button>
         `;
       }
@@ -352,73 +383,48 @@ async function openInlineDetails(anchorRow, key, buildHtml) {
 
   const detailRow = document.createElement("tr");
   detailRow.className = "details-row";
-  detailRow.innerHTML = `<td colspan="11">Loading history...</td>`;
+  detailRow.innerHTML = `<td colspan="14">Loading history...</td>`;
   anchorRow.insertAdjacentElement("afterend", detailRow);
 
   try {
-    detailRow.innerHTML = `<td colspan="11">${await buildHtml()}</td>`;
+    detailRow.innerHTML = `<td colspan="14">${await buildHtml()}</td>`;
     openDetailKey = key;
   } catch (err) {
-    detailRow.innerHTML = `<td colspan="11">Failed to load history.</td>`;
+    detailRow.innerHTML = `<td colspan="14">Failed to load history.</td>`;
     openDetailKey = key;
     console.error(err);
   }
 }
 
-async function loadTipsForSelectedRace() {
-  if (!selectedRaceId) {
-    tipsBody.innerHTML = "";
-    selectedRaceHeaderMeta = null;
-    renderSelectedRaceTitle();
-    if (raceMetaName) raceMetaName.textContent = "-";
-    if (raceMetaStarters) raceMetaStarters.textContent = "-";
-    if (raceMetaPrize) raceMetaPrize.textContent = "-";
-    if (raceMetaRating) raceMetaRating.textContent = "-";
-    if (raceMetaJumpLocal) raceMetaJumpLocal.textContent = "-";
-    if (raceMetaToJump) raceMetaToJump.textContent = "-";
-    selectedRaceJumpIso = null;
-    return;
-  }
-
-  const books = encodeURIComponent(selectedBookString());
-  const data = await jsonFetch(`/api/races/${selectedRaceId}/board?min_edge=0&books=${books}`);
+function renderBoardRows(data) {
   tipsBody.innerHTML = "";
   openDetailKey = null;
 
-  selectedRaceHeaderMeta = {
-    track: data.race.track,
-    race_number: data.race.race_number,
-    distance_m: data.race.distance_m,
-    track_rating: data.race.track_rating || "-",
-  };
-  renderSelectedRaceTitle();
-  if (raceMetaName) raceMetaName.textContent = data.race.race_name || "-";
-  if (raceMetaStarters) raceMetaStarters.textContent = String(data.race.starters ?? "-");
-  if (raceMetaPrize) {
-    const prize = Number(data.race.prize_pool || 0);
-    raceMetaPrize.textContent = prize > 0 ? `$${prize.toLocaleString()}` : "-";
-  }
-  if (raceMetaRating) raceMetaRating.textContent = data.race.track_rating || "-";
-  selectedRaceJumpIso = `${data.race.race_date}T${data.race.jump_time}:00`;
-  if (raceMetaJumpLocal) raceMetaJumpLocal.textContent = localJumpLabel(data.race.race_date, data.race.jump_time);
-  if (raceMetaToJump) raceMetaToJump.textContent = countdownLabel(data.race.race_date, data.race.jump_time);
+  const rows = valueFilterActive ? data.rows.filter((t) => t.edge_pct > 0) : data.rows;
 
-  data.rows.forEach((tip) => {
+  rows.forEach((tip) => {
     const tr = document.createElement("tr");
+    if (tip.edge_pct > 5) tr.className = "row-value-strong";
+    else if (tip.edge_pct < 0) tr.className = "row-value-negative";
+
+    const trainerSr = tip.trainer_strike_pct ? ` <span class="strike-rate">(${tip.trainer_strike_pct}%)</span>` : "";
+    const jockeySr = tip.jockey_strike_pct ? ` <span class="strike-rate">(${tip.jockey_strike_pct}%)</span>` : "";
+
     tr.innerHTML = `
       <td>${tip.horse_number}</td>
-      <td>${tip.barrier}</td>
+      <td class="col-barrier">${tip.barrier}</td>
       <td><button data-history="1">${escapeHtml(tip.horse_name)}</button></td>
-      <td><button data-trainer="1">${escapeHtml(tip.trainer)}</button></td>
-      <td><button data-jockey="1">${escapeHtml(tip.jockey)}</button></td>
-      <td>$${tip.predicted_price.toFixed(2)}</td>
+      <td><span class="form-string">${formatFormString(tip.form_last5)}</span></td>
+      <td><button data-trainer="1">${escapeHtml(tip.trainer)}${trainerSr}</button></td>
+      <td><button data-jockey="1">${escapeHtml(tip.jockey)}${jockeySr}</button></td>
+      <td class="col-predicted">$${tip.predicted_price.toFixed(2)}</td>
       <td>$${tip.market_odds.toFixed(2)}</td>
       <td>${escapeHtml(tip.best_book_symbol)}</td>
-      <td>${Number(tip.model_prob_pct || 0).toFixed(2)}%</td>
-      <td>${Number(tip.bookmaker_pct || 0).toFixed(2)}%</td>
+      <td class="col-model">${Number(tip.model_prob_pct || 0).toFixed(2)}%</td>
+      <td class="col-book">${Number(tip.bookmaker_pct || 0).toFixed(2)}%</td>
       <td class="${edgeClass(tip.edge_pct)}">${tip.edge_pct.toFixed(2)}%</td>
       <td><a href="${escapeHtml(tip.bet_url)}" target="_blank" rel="noreferrer">Bet</a></td>
-      <td><button data-track="1">Track</button></td>
+      <td><button data-track="1">+ Slip</button></td>
     `;
 
     tr.querySelector("button[data-track='1']").addEventListener("click", () => {
@@ -438,7 +444,7 @@ async function loadTipsForSelectedRace() {
       const key = `horse:${tip.runner_id}`;
       await openInlineDetails(tr, key, async () => {
         const history = await jsonFetch(`/api/runners/${tip.runner_id}/history`);
-        const rows = history.runs.map(
+        const hrows = history.runs.map(
           (run) => `
             <tr>
               <td>${escapeHtml(run.run_date)}</td>
@@ -452,7 +458,7 @@ async function loadTipsForSelectedRace() {
             </tr>
           `
         );
-        return renderDetailsTable(`Horse History - ${tip.horse_name}`, rows);
+        return renderDetailsTable(`Horse History - ${tip.horse_name}`, hrows);
       });
     });
 
@@ -460,7 +466,7 @@ async function loadTipsForSelectedRace() {
       const key = `trainer:${tip.trainer}`;
       await openInlineDetails(tr, key, async () => {
         const history = await jsonFetch(`/api/trainers/history?name=${encodeURIComponent(tip.trainer)}`);
-        const rows = history.runs.map(
+        const hrows = history.runs.map(
           (run) => `
             <tr>
               <td>${escapeHtml(run.run_date)}</td>
@@ -474,7 +480,7 @@ async function loadTipsForSelectedRace() {
             </tr>
           `
         );
-        return renderDetailsTable(`Trainer History - ${tip.trainer}`, rows);
+        return renderDetailsTable(`Trainer History - ${tip.trainer}`, hrows);
       });
     });
 
@@ -482,7 +488,7 @@ async function loadTipsForSelectedRace() {
       const key = `jockey:${tip.jockey}`;
       await openInlineDetails(tr, key, async () => {
         const history = await jsonFetch(`/api/jockeys/history?name=${encodeURIComponent(tip.jockey)}`);
-        const rows = history.runs.map(
+        const hrows = history.runs.map(
           (run) => `
             <tr>
               <td>${escapeHtml(run.run_date)}</td>
@@ -496,21 +502,20 @@ async function loadTipsForSelectedRace() {
             </tr>
           `
         );
-        return renderDetailsTable(`Jockey History - ${tip.jockey}`, rows);
+        return renderDetailsTable(`Jockey History - ${tip.jockey}`, hrows);
       });
     });
 
     tipsBody.appendChild(tr);
   });
 
-  if (data.rows.length) {
+  if (rows.length) {
     const sum = document.createElement("tr");
     sum.className = "summary-row";
     sum.innerHTML = `
-      <td colspan="8"><strong>Totals</strong></td>
-      <td><strong>${Number(data.totals?.model_pct_total || 0).toFixed(2)}%</strong></td>
-      <td><strong>${Number(data.totals?.bookmaker_pct_total || 0).toFixed(2)}%</strong></td>
-      <td></td>
+      <td colspan="10"><strong>Totals</strong></td>
+      <td class="col-model"><strong>${Number(data.totals?.model_pct_total || 0).toFixed(2)}%</strong></td>
+      <td class="col-book"><strong>${Number(data.totals?.bookmaker_pct_total || 0).toFixed(2)}%</strong></td>
       <td></td>
       <td></td>
     `;
@@ -518,8 +523,57 @@ async function loadTipsForSelectedRace() {
   }
 }
 
+async function loadTipsForSelectedRace() {
+  if (!selectedRaceId) {
+    tipsBody.innerHTML = "";
+    selectedRaceHeaderMeta = null;
+    renderSelectedRaceTitle();
+    if (raceMetaName) raceMetaName.textContent = "-";
+    if (raceMetaStarters) raceMetaStarters.textContent = "-";
+    if (raceMetaPrize) raceMetaPrize.textContent = "-";
+    if (raceMetaRating) raceMetaRating.textContent = "-";
+    if (raceMetaJumpLocal) raceMetaJumpLocal.textContent = "-";
+    if (raceMetaToJump) raceMetaToJump.textContent = "-";
+    if (raceMetaOverround) raceMetaOverround.textContent = "-";
+    selectedRaceJumpIso = null;
+    lastBoardData = null;
+    return;
+  }
+
+  const books = encodeURIComponent(selectedBookString());
+  const data = await jsonFetch(`/api/races/${selectedRaceId}/board?min_edge=0&books=${books}`);
+  lastBoardData = data;
+
+  selectedRaceHeaderMeta = {
+    track: data.race.track,
+    race_number: data.race.race_number,
+    distance_m: data.race.distance_m,
+    track_rating: data.race.track_rating || "-",
+  };
+  renderSelectedRaceTitle();
+  if (raceMetaName) raceMetaName.textContent = data.race.race_name || "-";
+  if (raceMetaStarters) raceMetaStarters.textContent = String(data.race.starters ?? "-");
+  if (raceMetaPrize) {
+    const prize = Number(data.race.prize_pool || 0);
+    raceMetaPrize.textContent = prize > 0 ? `$${prize.toLocaleString()}` : "-";
+  }
+  if (raceMetaRating) raceMetaRating.textContent = data.race.track_rating || "-";
+  selectedRaceJumpIso = `${data.race.race_date}T${data.race.jump_time}:00`;
+  if (raceMetaJumpLocal) raceMetaJumpLocal.textContent = localJumpLabel(data.race.race_date, data.race.jump_time);
+  if (raceMetaToJump) raceMetaToJump.textContent = countdownLabel(data.race.race_date, data.race.jump_time);
+
+  if (raceMetaOverround) {
+    const ovr = Number(data.totals?.bookmaker_pct_total || 0);
+    raceMetaOverround.textContent = `${ovr.toFixed(1)}%`;
+    raceMetaOverround.className = ovr < 110 ? "overround-good" : ovr > 120 ? "overround-bad" : "";
+  }
+
+  renderBoardRows(data);
+}
+
 async function loadTracked() {
   const data = await jsonFetch("/api/tips/tracked");
+  const prevCount = trackedTipsCache.length;
   trackedTipsCache = data.tips || [];
   if (trackedBody) {
     trackedBody.innerHTML = "";
@@ -538,6 +592,12 @@ async function loadTracked() {
     });
   }
   renderBetSlip();
+
+  if (trackedTipsCache.length > prevCount && betSlipCount) {
+    betSlipCount.classList.remove("slip-pulse");
+    void betSlipCount.offsetWidth;
+    betSlipCount.classList.add("slip-pulse");
+  }
 }
 
 function renderBetSlip() {
@@ -553,6 +613,7 @@ function renderBetSlip() {
     .sort((a, b) => new Date(`${b.race_date}T${b.jump_time}:00`) - new Date(`${a.race_date}T${a.jump_time}:00`));
   const totalStake = dayBets.reduce((acc, b) => acc + Number(b.stake || 0), 0);
   const pendingStake = nextToGo.reduce((acc, b) => acc + Number(b.stake || 0), 0);
+  const potentialReturn = nextToGo.reduce((acc, b) => acc + Number(b.stake || 0) * Number(b.odds_at_tip || 0), 0);
 
   betSlipCount.textContent = String(nextToGo.length);
   if (betSlipSummary) {
@@ -561,6 +622,14 @@ function renderBetSlip() {
       <div>Daily staked: <strong>${totalStake.toFixed(2)}u</strong></div>
       <div>Next-to-go staked: <strong>${pendingStake.toFixed(2)}u</strong></div>
     `;
+  }
+  if (betSlipPotential) {
+    if (nextToGo.length > 0) {
+      betSlipPotential.style.display = "";
+      betSlipPotential.innerHTML = `<div>Potential return: <span class="betslip-potential">${potentialReturn.toFixed(2)}u</span></div>`;
+    } else {
+      betSlipPotential.style.display = "none";
+    }
   }
 
   function renderSlipItems(target, rows, emptyText, showProfitLoss = false) {
@@ -586,8 +655,8 @@ function renderBetSlip() {
         <span class="${showProfitLoss ? plClass : edgeClass(Number(b.edge_pct))}">${showProfitLoss ? plText : `${Number(b.edge_pct).toFixed(2)}%`}</span>
       </div>
       <div class="betslip-actions">
-        <button class="betslip-icon-btn" data-edit-bet="1" title="Edit tracked bet">✎</button>
-        <button class="betslip-icon-btn" data-delete-bet="1" title="Delete tracked bet">🗑</button>
+        <button class="betslip-icon-btn" data-edit-bet="1" title="Edit tracked bet">\u270E</button>
+        <button class="betslip-icon-btn" data-delete-bet="1" title="Delete tracked bet">\uD83D\uDDD1</button>
       </div>
     `;
     item.querySelector("[data-edit-bet='1']").addEventListener("click", () => {
@@ -661,6 +730,7 @@ clearAllBooksBtn.addEventListener("click", async () => {
   tipsBody.innerHTML = "";
   selectedRaceHeaderMeta = null;
   selectedRaceJumpIso = null;
+  lastBoardData = null;
   renderSelectedRaceTitle();
 });
 
@@ -674,6 +744,29 @@ modalSaveBtn?.addEventListener("click", saveTrackedBetFromModal);
 modalCancelBtn?.addEventListener("click", closeTrackModal);
 trackModal?.addEventListener("click", (e) => {
   if (e.target === trackModal) closeTrackModal();
+});
+
+valueFilterBtn?.addEventListener("click", () => {
+  valueFilterActive = !valueFilterActive;
+  valueFilterBtn.classList.toggle("active", valueFilterActive);
+  valueFilterBtn.textContent = valueFilterActive ? "Show all runners" : "Value bets only";
+  if (lastBoardData) renderBoardRows(lastBoardData);
+});
+
+betSlipClearAll?.addEventListener("click", async () => {
+  const selectedDay = raceDateInput?.value || todayIso();
+  const dayBets = trackedTipsCache.filter((t) => localDayIso(t.tracked_at) === selectedDay && t.result === "pending");
+  if (!dayBets.length) return;
+  const ok = confirm(`Delete all ${dayBets.length} pending bets for today?`);
+  if (!ok) return;
+  for (const b of dayBets) {
+    await jsonFetch(`/api/tips/tracked/${b.id}`, { method: "DELETE" });
+  }
+  await loadTracked();
+});
+
+mobileSlipBtn?.addEventListener("click", () => {
+  document.getElementById("betSlip")?.scrollIntoView({ behavior: "smooth" });
 });
 
 raceDateInput.addEventListener("change", async () => {

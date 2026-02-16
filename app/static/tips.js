@@ -126,15 +126,18 @@ async function loadDailyTips() {
         : "edge-neutral";
     const form = tip.form_last5 || "-";
     let formHtml = "";
+    const lastIdx = form.length - 1;
     for (let i = 0; i < form.length; i++) {
       const ch = form[i];
-      if (i === 0 && ch === "1") formHtml += `<span class="form-first-win">${ch}</span>`;
-      else if (i === 0 && parseInt(ch) >= 4) formHtml += `<span class="form-first-bad">${ch}</span>`;
+      if (i === lastIdx && ch === "1") formHtml += `<span class="form-first-win">${ch}</span>`;
+      else if (i === lastIdx && parseInt(ch) >= 4) formHtml += `<span class="form-first-bad">${ch}</span>`;
       else formHtml += ch;
     }
     if (!form || form === "-") formHtml = "-";
-    const trainerSr = tip.trainer_strike_pct ? ` <span class="strike-rate">(${tip.trainer_strike_pct}%)</span>` : "";
-    const jockeySr = tip.jockey_strike_pct ? ` <span class="strike-rate">(${tip.jockey_strike_pct}%)</span>` : "";
+    function tipGrade(roi) {
+      if (roi == null || roi <= 0) return "";
+      return `<span class="stars" title="ROI: ${roi}%"><span class="star-filled">\u2605</span></span>`;
+    }
     const tr = document.createElement("tr");
     if (Number(tip.edge_pct) > 5) tr.className = "row-value-strong";
     tr.innerHTML = `
@@ -144,8 +147,8 @@ async function loadDailyTips() {
       <td>${tip.horse_number}</td>
       <td>${tip.horse_name}</td>
       <td><span class="form-string">${formHtml}</span></td>
-      <td>${tip.trainer}${trainerSr}</td>
-      <td>${tip.jockey}${jockeySr}</td>
+      <td>${tip.trainer}${tipGrade(tip.trainer_roi_pct)}</td>
+      <td>${tip.jockey}${tipGrade(tip.jockey_roi_pct)}</td>
       <td>$${Number(tip.market_odds).toFixed(2)}</td>
       <td>${tip.best_book_symbol}</td>
       <td class="${edgeCls}">${Number(tip.edge_pct).toFixed(2)}%</td>

@@ -76,29 +76,55 @@
           <div><span class="meta-label">Race Name</span><span id="raceMetaName">-</span></div>
           <div><span class="meta-label">Starters</span><span id="raceMetaStarters">-</span></div>
           <div><span class="meta-label">Prize Pool</span><span id="raceMetaPrize">-</span></div>
-          <div><span class="meta-label">Track Rating</span><span id="raceMetaRating">-</span></div>
           <div><span class="meta-label">Jump (Local)</span><span id="raceMetaJumpLocal">-</span></div>
           <div><span class="meta-label">Time to Jump</span><span id="raceMetaToJump">-</span></div>
           <div><span class="meta-label">Overround</span><span id="raceMetaOverround">-</span></div>
         </div>
-        <div style="margin-bottom:8px">
+        <div class="board-filters">
           <button id="valueFilterBtn" class="value-filter-btn">Value bets only</button>
+          <div id="detailFilters" class="detail-filters" hidden>
+            <label>Distance
+              <select id="filterDistance">
+                <option value="">All distances</option>
+                <option value="sprint">Sprint (&le;1200m)</option>
+                <option value="short">Short (1201–1400m)</option>
+                <option value="mile">Mile (1401–1600m)</option>
+                <option value="middle">Middle (1601–2000m)</option>
+                <option value="long">Long (2001m+)</option>
+              </select>
+            </label>
+            <label>Track
+              <select id="filterTrack">
+                <option value="">All tracks</option>
+              </select>
+            </label>
+            <label>Backup
+              <select id="filterRunsBack">
+                <option value="">All</option>
+                <option value="1">1st up</option>
+                <option value="2">2nd up</option>
+                <option value="3">3rd up</option>
+                <option value="4">4th up</option>
+                <option value="5">5th+ up</option>
+              </select>
+            </label>
+          </div>
         </div>
         <table id="tipsTable">
           <thead>
             <tr>
-              <th>#</th>
-              <th class="col-barrier">Barrier</th>
+              <th data-sort="horse_number" style="cursor:pointer">#</th>
+              <th data-sort="barrier" class="col-barrier" style="cursor:pointer">Barrier</th>
               <th>Horse</th>
               <th>Form</th>
-              <th>Trainer</th>
-              <th>Jockey</th>
-              <th class="col-predicted">Pred. Price</th>
-              <th>Mkt Odds</th>
+              <th data-sort="trainer_roi_pct" style="cursor:pointer">Trainer</th>
+              <th data-sort="jockey_roi_pct" style="cursor:pointer">Jockey</th>
+              <th data-sort="predicted_price" class="col-predicted" style="cursor:pointer">Pred. Price</th>
+              <th data-sort="market_odds" style="cursor:pointer">Mkt Odds</th>
               <th>Best</th>
-              <th class="col-model">Model %</th>
-              <th class="col-book">Book %</th>
-              <th>Edge %</th>
+              <th data-sort="model_prob_pct" class="col-model" style="cursor:pointer">Model %</th>
+              <th data-sort="bookmaker_pct" class="col-book" style="cursor:pointer">Book %</th>
+              <th data-sort="edge_pct" style="cursor:pointer">Edge %</th>
               <th>Bet</th>
               <th></th>
             </tr>

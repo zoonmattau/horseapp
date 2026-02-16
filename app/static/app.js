@@ -31,12 +31,17 @@ const selectAllBooksBtn = document.getElementById("selectAllBooks");
 const clearAllBooksBtn = document.getElementById("clearAllBooks");
 const valueFilterBtn = document.getElementById("valueFilterBtn");
 const mobileSlipBtn = document.getElementById("mobileSlipBtn");
+const detailFiltersWrap = document.getElementById("detailFilters");
+const filterDistanceEl = document.getElementById("filterDistance");
+const filterTrackEl = document.getElementById("filterTrack");
+const filterRunsBackEl = document.getElementById("filterRunsBack");
 
 let bookmakers = [];
 let bookSymbol = {};
 let selectedBooks = new Set();
 let selectedRaceId = null;
 let openDetailKey = null;
+let openDetailEntity = null;
 let racesForDay = [];
 let tipSignals = {};
 let trackedTipsCache = [];
@@ -45,6 +50,8 @@ let selectedRaceJumpIso = null;
 let selectedRaceHeaderMeta = null;
 let valueFilterActive = false;
 let lastBoardData = null;
+let boardSortKey = "edge_pct";
+let boardSortAsc = false;
 
 function syncThemeMode() {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -166,14 +173,20 @@ function profitLossUnits(bet) {
   return null;
 }
 
+function gradeHtml(roi) {
+  if (roi == null || roi <= 0) return "";
+  return `<span class="stars" title="ROI: ${roi}%"><span class="star-filled">\u2605</span></span>`;
+}
+
 function formatFormString(form) {
   if (!form) return "-";
+  const last = form.length - 1;
   let html = "";
   for (let i = 0; i < form.length; i++) {
     const ch = form[i];
-    if (i === 0 && ch === "1") {
+    if (i === last && ch === "1") {
       html += `<span class="form-first-win">${ch}</span>`;
-    } else if (i === 0 && parseInt(ch) >= 4) {
+    } else if (i === last && parseInt(ch) >= 4) {
       html += `<span class="form-first-bad">${ch}</span>`;
     } else {
       html += ch;
@@ -349,11 +362,56 @@ function renderMatrix() {
   });
 }
 
-function renderDetailsTable(title, rows) {
-  const body = rows.join("") || `<tr><td colspan="8">No history available.</td></tr>`;
+function renderStatsBar(stats) {
+  if (!stats) return "";
+  const roiCls = stats.roi > 0 ? "edge-positive" : stats.roi < 0 ? "edge-negative" : "edge-neutral";
+  return `
+    <div class="stats-grid">
+      <div class="stat-badge"><div class="stat-value">${stats.runs}</div><div class="stat-label">Runs</div></div>
+      <div class="stat-badge"><div class="stat-value">${stats.wins}</div><div class="stat-label">Wins</div></div>
+      <div class="stat-badge"><div class="stat-value">${stats.places}</div><div class="stat-label">Places</div></div>
+      <div class="stat-badge"><div class="stat-value">${stats.strike_pct}%</div><div class="stat-label">Strike Rate</div></div>
+      <div class="stat-badge"><div class="stat-value">${stats.place_pct}%</div><div class="stat-label">Place Rate</div></div>
+      <div class="stat-badge"><div class="stat-value ${roiCls}">${stats.roi}%</div><div class="stat-label">ROI</div></div>
+    </div>
+  `;
+}
+
+function runsBackLabel(val) {
+  if (!val) return "-";
+  if (val === 1) return "1st up";
+  if (val === 2) return "2nd up";
+  if (val === 3) return "3rd up";
+  if (val === 4) return "4th up";
+  return `${val}th up`;
+}
+
+function getCardFilters() {
+  return {
+    distance: filterDistanceEl?.value || "",
+    track: filterTrackEl?.value || "",
+    runs_back: filterRunsBackEl?.value || "",
+  };
+}
+
+function showDetailFilters(show) {
+  if (detailFiltersWrap) detailFiltersWrap.hidden = !show;
+}
+
+function populateTrackDropdown(tracks, current) {
+  if (!filterTrackEl) return;
+  const val = current || filterTrackEl.value;
+  filterTrackEl.innerHTML = `<option value="">All tracks</option>` +
+    (tracks || []).map((t) => `<option value="${escapeHtml(t)}"${t === val ? " selected" : ""}>${escapeHtml(t)}</option>`).join("");
+}
+
+function renderDetailsTable(title, subtitle, rows, stats) {
+  const body = rows.join("") || `<tr><td colspan="7">No history available.</td></tr>`;
   return `
     <div class="details-card">
       <div class="details-title">${escapeHtml(title)}</div>
+      ${subtitle ? `<div class="details-subtitle">${subtitle}</div>` : ""}
+      ${renderStatsBar(stats)}
       <table>
         <thead>
           <tr>
@@ -363,8 +421,7 @@ function renderDetailsTable(title, rows) {
             <th>Distance</th>
             <th>Finish</th>
             <th>SP</th>
-            <th>Weight</th>
-            <th>Jockey</th>
+            <th>Backup</th>
           </tr>
         </thead>
         <tbody>${body}</tbody>
@@ -373,11 +430,54 @@ function renderDetailsTable(title, rows) {
   `;
 }
 
-async function openInlineDetails(anchorRow, key, buildHtml) {
+async function fetchAndRenderDetails(entityType, entityName, filters, runnerCtx) {
+  const params = new URLSearchParams({ name: entityName });
+  if (filters.distance) params.set("distance", filters.distance);
+  if (filters.track) params.set("track", filters.track);
+  if (filters.runs_back) params.set("runs_back", filters.runs_back);
+  const url = `/api/${entityType}s/history?${params.toString()}`;
+  const history = await jsonFetch(url);
+  populateTrackDropdown(history.available_tracks, filters.track);
+  const subtitle = runnerCtx
+    ? `Barrier ${runnerCtx.barrier} \u2022 $${Number(runnerCtx.market_odds).toFixed(2)}`
+    : "";
+  const hrows = history.runs.map(
+    (run) => `
+      <tr>
+        <td>${escapeHtml(run.run_date)}</td>
+        <td>${escapeHtml(run.horse_name)}</td>
+        <td>${escapeHtml(run.track)}</td>
+        <td>${escapeHtml(run.distance_m)}m</td>
+        <td>${escapeHtml(run.finish_pos)}</td>
+        <td>$${Number(run.starting_price).toFixed(2)}</td>
+        <td>${runsBackLabel(run.runs_back)}</td>
+      </tr>
+    `
+  );
+  return renderDetailsTable(
+    `${entityType === "trainer" ? "Trainer" : "Jockey"} - ${entityName}`,
+    subtitle,
+    hrows,
+    history.stats
+  );
+}
+
+async function refreshOpenDetail() {
+  if (!openDetailEntity) return;
+  const detailRow = tipsBody.querySelector("tr.details-row");
+  if (!detailRow) return;
+  const { entityType, entityName, runnerCtx } = openDetailEntity;
+  const html = await fetchAndRenderDetails(entityType, entityName, getCardFilters(), runnerCtx);
+  detailRow.innerHTML = `<td colspan="14">${html}</td>`;
+}
+
+async function openInlineDetails(anchorRow, key, buildHtml, entity) {
   const existing = tipsBody.querySelector("tr.details-row");
   if (existing) existing.remove();
   if (openDetailKey === key) {
     openDetailKey = null;
+    openDetailEntity = null;
+    showDetailFilters(false);
     return;
   }
 
@@ -389,34 +489,54 @@ async function openInlineDetails(anchorRow, key, buildHtml) {
   try {
     detailRow.innerHTML = `<td colspan="14">${await buildHtml()}</td>`;
     openDetailKey = key;
+    openDetailEntity = entity || null;
+    showDetailFilters(!!entity);
   } catch (err) {
     detailRow.innerHTML = `<td colspan="14">Failed to load history.</td>`;
     openDetailKey = key;
+    openDetailEntity = entity || null;
+    showDetailFilters(!!entity);
     console.error(err);
   }
+}
+
+function updateSortIndicators() {
+  document.querySelectorAll("#tipsTable thead th[data-sort]").forEach((th) => {
+    const key = th.getAttribute("data-sort");
+    const base = th.textContent.replace(/ [▲▼]$/, "");
+    if (key === boardSortKey) {
+      th.textContent = `${base} ${boardSortAsc ? "\u25B2" : "\u25BC"}`;
+    } else {
+      th.textContent = base;
+    }
+  });
 }
 
 function renderBoardRows(data) {
   tipsBody.innerHTML = "";
   openDetailKey = null;
+  openDetailEntity = null;
+  showDetailFilters(false);
 
-  const rows = valueFilterActive ? data.rows.filter((t) => t.edge_pct > 0) : data.rows;
+  let rows = valueFilterActive ? data.rows.filter((t) => t.edge_pct > 0) : [...data.rows];
+  rows.sort((a, b) => {
+    const av = Number(a[boardSortKey] || 0);
+    const bv = Number(b[boardSortKey] || 0);
+    return boardSortAsc ? av - bv : bv - av;
+  });
+  updateSortIndicators();
 
   rows.forEach((tip) => {
     const tr = document.createElement("tr");
     if (tip.edge_pct > 5) tr.className = "row-value-strong";
-    else if (tip.edge_pct < 0) tr.className = "row-value-negative";
-
-    const trainerSr = tip.trainer_strike_pct ? ` <span class="strike-rate">(${tip.trainer_strike_pct}%)</span>` : "";
-    const jockeySr = tip.jockey_strike_pct ? ` <span class="strike-rate">(${tip.jockey_strike_pct}%)</span>` : "";
 
     tr.innerHTML = `
       <td>${tip.horse_number}</td>
       <td class="col-barrier">${tip.barrier}</td>
       <td><button data-history="1">${escapeHtml(tip.horse_name)}</button></td>
       <td><span class="form-string">${formatFormString(tip.form_last5)}</span></td>
-      <td><button data-trainer="1">${escapeHtml(tip.trainer)}${trainerSr}</button></td>
-      <td><button data-jockey="1">${escapeHtml(tip.jockey)}${jockeySr}</button></td>
+      <td><button data-trainer="1">${escapeHtml(tip.trainer)}</button>${gradeHtml(tip.trainer_roi_pct)}</td>
+      <td><button data-jockey="1">${escapeHtml(tip.jockey)}</button>${gradeHtml(tip.jockey_roi_pct)}</td>
       <td class="col-predicted">$${tip.predicted_price.toFixed(2)}</td>
       <td>$${tip.market_odds.toFixed(2)}</td>
       <td>${escapeHtml(tip.best_book_symbol)}</td>
@@ -458,52 +578,26 @@ function renderBoardRows(data) {
             </tr>
           `
         );
-        return renderDetailsTable(`Horse History - ${tip.horse_name}`, hrows);
+        return renderDetailsTable(`Horse History - ${tip.horse_name}`, "", hrows);
       });
     });
 
+    const runnerCtx = { barrier: tip.barrier, market_odds: tip.market_odds };
+
     tr.querySelector("button[data-trainer='1']").addEventListener("click", async () => {
       const key = `trainer:${tip.trainer}`;
+      const entity = { entityType: "trainer", entityName: tip.trainer, runnerCtx };
       await openInlineDetails(tr, key, async () => {
-        const history = await jsonFetch(`/api/trainers/history?name=${encodeURIComponent(tip.trainer)}`);
-        const hrows = history.runs.map(
-          (run) => `
-            <tr>
-              <td>${escapeHtml(run.run_date)}</td>
-              <td>${escapeHtml(run.horse_name)}</td>
-              <td>${escapeHtml(run.track)}</td>
-              <td>${escapeHtml(run.distance_m)}m</td>
-              <td>${escapeHtml(run.finish_pos)}</td>
-              <td>$${Number(run.starting_price).toFixed(2)}</td>
-              <td>-</td>
-              <td>-</td>
-            </tr>
-          `
-        );
-        return renderDetailsTable(`Trainer History - ${tip.trainer}`, hrows);
-      });
+        return fetchAndRenderDetails("trainer", tip.trainer, getCardFilters(), runnerCtx);
+      }, entity);
     });
 
     tr.querySelector("button[data-jockey='1']").addEventListener("click", async () => {
       const key = `jockey:${tip.jockey}`;
+      const entity = { entityType: "jockey", entityName: tip.jockey, runnerCtx };
       await openInlineDetails(tr, key, async () => {
-        const history = await jsonFetch(`/api/jockeys/history?name=${encodeURIComponent(tip.jockey)}`);
-        const hrows = history.runs.map(
-          (run) => `
-            <tr>
-              <td>${escapeHtml(run.run_date)}</td>
-              <td>${escapeHtml(run.horse_name)}</td>
-              <td>${escapeHtml(run.track)}</td>
-              <td>${escapeHtml(run.distance_m)}m</td>
-              <td>${escapeHtml(run.finish_pos)}</td>
-              <td>$${Number(run.starting_price).toFixed(2)}</td>
-              <td>-</td>
-              <td>${escapeHtml(tip.jockey)}</td>
-            </tr>
-          `
-        );
-        return renderDetailsTable(`Jockey History - ${tip.jockey}`, hrows);
-      });
+        return fetchAndRenderDetails("jockey", tip.jockey, getCardFilters(), runnerCtx);
+      }, entity);
     });
 
     tipsBody.appendChild(tr);
@@ -753,6 +847,10 @@ valueFilterBtn?.addEventListener("click", () => {
   if (lastBoardData) renderBoardRows(lastBoardData);
 });
 
+[filterDistanceEl, filterTrackEl, filterRunsBackEl].forEach((el) => {
+  el?.addEventListener("change", () => refreshOpenDetail());
+});
+
 betSlipClearAll?.addEventListener("click", async () => {
   const selectedDay = raceDateInput?.value || todayIso();
   const dayBets = trackedTipsCache.filter((t) => localDayIso(t.tracked_at) === selectedDay && t.result === "pending");
@@ -773,6 +871,19 @@ raceDateInput.addEventListener("change", async () => {
   await loadRaceData();
   await loadTipsForSelectedRace();
   renderBetSlip();
+});
+
+document.querySelectorAll("#tipsTable thead th[data-sort]").forEach((th) => {
+  th.addEventListener("click", () => {
+    const key = th.getAttribute("data-sort");
+    if (boardSortKey === key) {
+      boardSortAsc = !boardSortAsc;
+    } else {
+      boardSortKey = key;
+      boardSortAsc = false;
+    }
+    if (lastBoardData) renderBoardRows(lastBoardData);
+  });
 });
 
 async function init() {

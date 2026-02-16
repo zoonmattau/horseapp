@@ -927,37 +927,37 @@ def get_race_board(
         jockey_names = list({item["jockey"] for item in by_runner.values()})
         trainer_names = list({item["trainer"] for item in by_runner.values()})
 
-        jockey_sr: dict[str, float] = {}
+        jockey_roi: dict[str, float] = {}
         if jockey_names:
             jph = ",".join("?" for _ in jockey_names)
             jrows = conn.execute(
-                f"SELECT jockey, COUNT(*) AS runs, SUM(CASE WHEN finish_pos = 1 THEN 1 ELSE 0 END) AS wins FROM jockey_history WHERE jockey IN ({jph}) GROUP BY jockey",
+                f"SELECT jockey, COUNT(*) AS runs, SUM(CASE WHEN finish_pos = 1 THEN starting_price ELSE 0 END) AS returns FROM jockey_history WHERE jockey IN ({jph}) GROUP BY jockey",
                 jockey_names,
             ).fetchall()
             for jr in jrows:
-                jockey_sr[jr["jockey"]] = round((jr["wins"] / max(jr["runs"], 1)) * 100.0, 1)
+                jockey_roi[jr["jockey"]] = round(((jr["returns"] - jr["runs"]) / max(jr["runs"], 1)) * 100.0, 1)
 
-        trainer_sr: dict[str, float] = {}
+        trainer_roi: dict[str, float] = {}
         if trainer_names:
             tph = ",".join("?" for _ in trainer_names)
             trows = conn.execute(
-                f"SELECT trainer, COUNT(*) AS runs, SUM(CASE WHEN finish_pos = 1 THEN 1 ELSE 0 END) AS wins FROM trainer_history WHERE trainer IN ({tph}) GROUP BY trainer",
+                f"SELECT trainer, COUNT(*) AS runs, SUM(CASE WHEN finish_pos = 1 THEN starting_price ELSE 0 END) AS returns FROM trainer_history WHERE trainer IN ({tph}) GROUP BY trainer",
                 trainer_names,
             ).fetchall()
             for tr_row in trows:
-                trainer_sr[tr_row["trainer"]] = round((tr_row["wins"] / max(tr_row["runs"], 1)) * 100.0, 1)
+                trainer_roi[tr_row["trainer"]] = round(((tr_row["returns"] - tr_row["runs"]) / max(tr_row["runs"], 1)) * 100.0, 1)
     else:
         form_map = {}
-        jockey_sr = {}
-        trainer_sr = {}
+        jockey_roi = {}
+        trainer_roi = {}
 
     conn.close()
 
     for rid, item in by_runner.items():
         positions = form_map.get(rid, [])
-        item["form_last5"] = "".join(str(p) if p < 10 else "x" for p in positions)
-        item["jockey_strike_pct"] = jockey_sr.get(item["jockey"], 0.0)
-        item["trainer_strike_pct"] = trainer_sr.get(item["trainer"], 0.0)
+        item["form_last5"] = "".join(str(p) if p < 10 else "x" for p in reversed(positions))
+        item["jockey_roi_pct"] = jockey_roi.get(item["jockey"], 0.0)
+        item["trainer_roi_pct"] = trainer_roi.get(item["trainer"], 0.0)
 
     board = list(by_runner.values())
     for item in board:
@@ -1086,16 +1086,16 @@ def get_daily_tips(
 
         race_jockeys = list({item["jockey"] for item in by_runner.values()})
         race_trainers = list({item["trainer"] for item in by_runner.values()})
-        jsr: dict[str, float] = {}
+        jroi: dict[str, float] = {}
         if race_jockeys:
             jph2 = ",".join("?" for _ in race_jockeys)
-            for jr in conn.execute(f"SELECT jockey, COUNT(*) AS runs, SUM(CASE WHEN finish_pos = 1 THEN 1 ELSE 0 END) AS wins FROM jockey_history WHERE jockey IN ({jph2}) GROUP BY jockey", race_jockeys).fetchall():
-                jsr[jr["jockey"]] = round((jr["wins"] / max(jr["runs"], 1)) * 100.0, 1)
-        tsr: dict[str, float] = {}
+            for jr in conn.execute(f"SELECT jockey, COUNT(*) AS runs, SUM(CASE WHEN finish_pos = 1 THEN starting_price ELSE 0 END) AS returns FROM jockey_history WHERE jockey IN ({jph2}) GROUP BY jockey", race_jockeys).fetchall():
+                jroi[jr["jockey"]] = round(((jr["returns"] - jr["runs"]) / max(jr["runs"], 1)) * 100.0, 1)
+        troi: dict[str, float] = {}
         if race_trainers:
             tph2 = ",".join("?" for _ in race_trainers)
-            for tr2 in conn.execute(f"SELECT trainer, COUNT(*) AS runs, SUM(CASE WHEN finish_pos = 1 THEN 1 ELSE 0 END) AS wins FROM trainer_history WHERE trainer IN ({tph2}) GROUP BY trainer", race_trainers).fetchall():
-                tsr[tr2["trainer"]] = round((tr2["wins"] / max(tr2["runs"], 1)) * 100.0, 1)
+            for tr2 in conn.execute(f"SELECT trainer, COUNT(*) AS runs, SUM(CASE WHEN finish_pos = 1 THEN starting_price ELSE 0 END) AS returns FROM trainer_history WHERE trainer IN ({tph2}) GROUP BY trainer", race_trainers).fetchall():
+                troi[tr2["trainer"]] = round(((tr2["returns"] - tr2["runs"]) / max(tr2["runs"], 1)) * 100.0, 1)
 
         probs = normalized_probs_from_prices(
             {rid: item["predicted_price"] for rid, item in by_runner.items()}
@@ -1104,7 +1104,7 @@ def get_daily_tips(
             model_prob = probs.get(rid, 0.0)
             edge = round(calc_edge_pct(model_prob, item["market_odds"]), 2)
             positions = race_form_map.get(rid, [])
-            form_str = "".join(str(p) if p < 10 else "x" for p in positions)
+            form_str = "".join(str(p) if p < 10 else "x" for p in reversed(positions))
             if edge >= min_edge:
                 all_tips.append(
                     {
@@ -1118,8 +1118,8 @@ def get_daily_tips(
                         "bookmaker_pct": round((1.0 / max(item["market_odds"], 1.01)) * 100.0, 2),
                         "edge_pct": edge,
                         "form_last5": form_str,
-                        "jockey_strike_pct": jsr.get(item["jockey"], 0.0),
-                        "trainer_strike_pct": tsr.get(item["trainer"], 0.0),
+                        "jockey_roi_pct": jroi.get(item["jockey"], 0.0),
+                        "trainer_roi_pct": troi.get(item["trainer"], 0.0),
                     }
                 )
 
@@ -1609,8 +1609,72 @@ def runner_history(runner_id: int):
     return {"runner": dict(runner), "runs": [dict(r) for r in rows]}
 
 
+# ---------------------------------------------------------------------------
+# Trainer / Jockey history helpers
+# ---------------------------------------------------------------------------
+
+DISTANCE_CATEGORIES = {
+    "sprint": (0, 1200),
+    "short": (1201, 1400),
+    "mile": (1401, 1600),
+    "middle": (1601, 2000),
+    "long": (2001, 99999),
+}
+
+
+def annotate_runs_back(rows: list[dict]) -> list[dict]:
+    """Group rows by horse_name, sort chronologically, mark each run with
+    runs_back (1 = first-up, 2 = second-up …). A gap > 60 days = new prep."""
+    by_horse: dict[str, list[dict]] = {}
+    for r in rows:
+        by_horse.setdefault(r["horse_name"], []).append(r)
+    for horse_rows in by_horse.values():
+        horse_rows.sort(key=lambda r: r["run_date"])
+        prep_seq = 1
+        for i, r in enumerate(horse_rows):
+            if i > 0:
+                prev = datetime.strptime(horse_rows[i - 1]["run_date"], "%Y-%m-%d")
+                curr = datetime.strptime(r["run_date"], "%Y-%m-%d")
+                if (curr - prev).days > 60:
+                    prep_seq = 1
+                else:
+                    prep_seq += 1
+            else:
+                prep_seq = 1
+            r["runs_back"] = prep_seq
+    return rows
+
+
+def compute_filtered_stats(rows: list[dict]) -> dict:
+    total = len(rows)
+    wins = sum(1 for r in rows if r.get("finish_pos") == 1)
+    places = sum(1 for r in rows if (r.get("finish_pos") or 99) <= 3)
+    returns = sum(float(r.get("starting_price") or 0) for r in rows if r.get("finish_pos") == 1)
+    roi = round(((returns - total) / max(total, 1)) * 100.0, 1)
+    strike = round((wins / max(total, 1)) * 100.0, 1)
+    place_pct = round((places / max(total, 1)) * 100.0, 1)
+    return {"runs": total, "wins": wins, "places": places, "strike_pct": strike, "place_pct": place_pct, "roi": roi}
+
+
+def filter_runs(rows: list[dict], distance: Optional[str], track: Optional[str], runs_back: Optional[int]) -> list[dict]:
+    filtered = rows
+    if distance and distance in DISTANCE_CATEGORIES:
+        lo, hi = DISTANCE_CATEGORIES[distance]
+        filtered = [r for r in filtered if lo <= (r.get("distance_m") or 0) <= hi]
+    if track:
+        filtered = [r for r in filtered if r.get("track") == track]
+    if runs_back:
+        filtered = [r for r in filtered if r.get("runs_back") == runs_back]
+    return filtered
+
+
 @app.get("/api/trainers/history")
-def trainer_history(name: str):
+def trainer_history(
+    name: str,
+    distance: Optional[str] = None,
+    track: Optional[str] = None,
+    runs_back: Optional[int] = None,
+):
     conn = get_conn()
     rows = conn.execute(
         """
@@ -1618,16 +1682,32 @@ def trainer_history(name: str):
         FROM trainer_history
         WHERE trainer = ?
         ORDER BY run_date DESC
-        LIMIT 25
         """,
         (name,),
     ).fetchall()
     conn.close()
-    return {"trainer": name, "runs": [dict(r) for r in rows]}
+    all_rows = [dict(r) for r in rows]
+    available_tracks = sorted({r["track"] for r in all_rows if r.get("track")})
+    annotate_runs_back(all_rows)
+    filtered = filter_runs(all_rows, distance, track, runs_back)
+    stats = compute_filtered_stats(filtered)
+    filtered.sort(key=lambda r: r["run_date"], reverse=True)
+    display_rows = filtered[:25]
+    return {
+        "trainer": name,
+        "stats": stats,
+        "runs": display_rows,
+        "available_tracks": available_tracks,
+    }
 
 
 @app.get("/api/jockeys/history")
-def jockey_history(name: str):
+def jockey_history(
+    name: str,
+    distance: Optional[str] = None,
+    track: Optional[str] = None,
+    runs_back: Optional[int] = None,
+):
     conn = get_conn()
     rows = conn.execute(
         """
@@ -1635,9 +1715,20 @@ def jockey_history(name: str):
         FROM jockey_history
         WHERE jockey = ?
         ORDER BY run_date DESC
-        LIMIT 25
         """,
         (name,),
     ).fetchall()
     conn.close()
-    return {"jockey": name, "runs": [dict(r) for r in rows]}
+    all_rows = [dict(r) for r in rows]
+    available_tracks = sorted({r["track"] for r in all_rows if r.get("track")})
+    annotate_runs_back(all_rows)
+    filtered = filter_runs(all_rows, distance, track, runs_back)
+    stats = compute_filtered_stats(filtered)
+    filtered.sort(key=lambda r: r["run_date"], reverse=True)
+    display_rows = filtered[:25]
+    return {
+        "jockey": name,
+        "stats": stats,
+        "runs": display_rows,
+        "available_tracks": available_tracks,
+    }

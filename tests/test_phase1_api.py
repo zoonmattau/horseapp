@@ -108,6 +108,12 @@ class Phase1ApiTests(unittest.TestCase):
                 default_min_edge=2.5,
                 notifications_enabled=1,
                 notify_min_edge=3.0,
+                theme="dark",
+                odds_format="american",
+                default_stake=2.0,
+                bankroll_units=250.0,
+                auto_settle_enabled=1,
+                analytics_top_n=10,
             )
         )
         self.assertEqual(settings_resp["status"], "ok")
@@ -119,6 +125,11 @@ class Phase1ApiTests(unittest.TestCase):
         self.assertEqual(profile["email"], "test@example.com")
         self.assertEqual(float(settings["default_min_edge"]), 2.5)
         self.assertEqual(int(settings["notifications_enabled"]), 1)
+        self.assertEqual(settings["theme"], "dark")
+        self.assertEqual(settings["odds_format"], "american")
+        self.assertEqual(float(settings["default_stake"]), 2.0)
+        self.assertEqual(float(settings["bankroll_units"]), 250.0)
+        self.assertEqual(int(settings["analytics_top_n"]), 10)
 
     def test_track_tip_rejects_unknown_bookmaker(self):
         race_id, runner = self._first_race_and_runner()
@@ -135,6 +146,57 @@ class Phase1ApiTests(unittest.TestCase):
             )
         self.assertEqual(ctx.exception.status_code, 400)
         self.assertIn("Unknown bookmaker", str(ctx.exception.detail))
+
+    def test_auto_settlement_after_race_result_publish(self):
+        race_id, runner = self._first_race_and_runner()
+        track_resp = self.main.track_tip(
+            self.main.TrackTipRequest(
+                race_id=race_id,
+                runner_id=runner["runner_id"],
+                bookmaker=runner["best_bookmaker"],
+                edge_pct=runner["edge_pct"],
+                odds_at_tip=runner["market_odds"],
+                stake=1.0,
+            )
+        )
+        self.assertEqual(track_resp["status"], "tracked")
+
+        tips = self.main.tracked_tips().get("tips", [])
+        self.assertTrue(tips)
+        bet_id = tips[0]["id"]
+        self.__class__.created_bet_ids.append(bet_id)
+
+        sim_resp = self.main.simulate_race_result(race_id)
+        self.assertEqual(sim_resp["status"], "ok")
+
+        bets_payload = self.main.get_user_bets()
+        bets = bets_payload.get("bets", [])
+        bet = next((b for b in bets if b["id"] == bet_id), None)
+        self.assertIsNotNone(bet)
+        self.assertIn(bet["result"], {"won", "lost"})
+        self.assertIsNotNone(bet["settled_at"])
+
+    def test_bets_analytics_payload(self):
+        payload = self.main.get_user_bets_analytics()
+        self.assertIn("summary", payload)
+        self.assertIn("by_track", payload)
+        self.assertIn("by_bookmaker", payload)
+
+        summary = payload["summary"]
+        for key in [
+            "total_bets",
+            "settled_bets",
+            "pending_bets",
+            "profit_units",
+            "roi_pct",
+            "avg_clv_pct",
+            "max_drawdown_units",
+            "best_win_streak",
+            "best_loss_streak",
+            "current_streak_type",
+            "current_streak",
+        ]:
+            self.assertIn(key, summary)
 
 
 if __name__ == "__main__":

@@ -56,7 +56,12 @@ let boardSortAsc = false;
 function syncThemeMode() {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
   const apply = () => {
-    document.documentElement.setAttribute("data-theme", mq.matches ? "dark" : "light");
+    const pref = (localStorage.getItem("horse_theme_pref") || "system").toLowerCase();
+    if (pref === "light" || pref === "dark") {
+      document.documentElement.setAttribute("data-theme", pref);
+    } else {
+      document.documentElement.setAttribute("data-theme", mq.matches ? "dark" : "light");
+    }
   };
   apply();
   mq.addEventListener("change", apply);

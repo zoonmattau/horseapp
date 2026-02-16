@@ -107,6 +107,18 @@ HORSE_NAME_PART_B = [
     "Avenue",
     "Legend",
 ]
+DEFAULT_USER_SETTINGS = {
+    "timezone": "Australia/Sydney",
+    "default_min_edge": 1.0,
+    "notifications_enabled": 1,
+    "notify_min_edge": 1.0,
+    "theme": "system",
+    "odds_format": "decimal",
+    "default_stake": 1.0,
+    "bankroll_units": 100.0,
+    "auto_settle_enabled": 1,
+    "analytics_top_n": 8,
+}
 
 app = FastAPI(title="Horse Tips MVP", version="0.1.0")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -132,10 +144,16 @@ class UpdateUserProfileRequest(BaseModel):
 
 
 class UpdateUserSettingsRequest(BaseModel):
-    timezone: str
-    default_min_edge: float
-    notifications_enabled: int
-    notify_min_edge: float
+    timezone: Optional[str] = None
+    default_min_edge: Optional[float] = None
+    notifications_enabled: Optional[int] = None
+    notify_min_edge: Optional[float] = None
+    theme: Optional[str] = None
+    odds_format: Optional[str] = None
+    default_stake: Optional[float] = None
+    bankroll_units: Optional[float] = None
+    auto_settle_enabled: Optional[int] = None
+    analytics_top_n: Optional[int] = None
 
 
 class UpdateBetResultRequest(BaseModel):
@@ -258,7 +276,23 @@ def init_db() -> None:
             odds_at_tip REAL NOT NULL,
             stake REAL NOT NULL DEFAULT 0,
             result TEXT NOT NULL DEFAULT 'pending',
-            tracked_at TEXT NOT NULL
+            tracked_at TEXT NOT NULL,
+            settled_at TEXT
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS race_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_id INTEGER NOT NULL,
+            runner_id INTEGER NOT NULL,
+            finish_pos INTEGER NOT NULL,
+            closing_odds REAL,
+            official_at TEXT NOT NULL,
+            UNIQUE(race_id, runner_id),
+            FOREIGN KEY (race_id) REFERENCES races(id),
+            FOREIGN KEY (runner_id) REFERENCES runners(id)
         )
         """
     )
@@ -282,6 +316,12 @@ def init_db() -> None:
             default_min_edge REAL NOT NULL,
             notifications_enabled INTEGER NOT NULL,
             notify_min_edge REAL NOT NULL,
+            theme TEXT NOT NULL DEFAULT 'system',
+            odds_format TEXT NOT NULL DEFAULT 'decimal',
+            default_stake REAL NOT NULL DEFAULT 1.0,
+            bankroll_units REAL NOT NULL DEFAULT 100.0,
+            auto_settle_enabled INTEGER NOT NULL DEFAULT 1,
+            analytics_top_n INTEGER NOT NULL DEFAULT 8,
             updated_at TEXT NOT NULL
         )
         """
@@ -364,6 +404,27 @@ def ensure_schema_compat() -> None:
     if "stake" not in tracked_cols:
         cur.execute("ALTER TABLE tracked_tips ADD COLUMN stake REAL")
         cur.execute("UPDATE tracked_tips SET stake = 0 WHERE stake IS NULL")
+    if "settled_at" not in tracked_cols:
+        cur.execute("ALTER TABLE tracked_tips ADD COLUMN settled_at TEXT")
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS race_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_id INTEGER NOT NULL,
+            runner_id INTEGER NOT NULL,
+            finish_pos INTEGER NOT NULL,
+            closing_odds REAL,
+            official_at TEXT NOT NULL,
+            UNIQUE(race_id, runner_id),
+            FOREIGN KEY (race_id) REFERENCES races(id),
+            FOREIGN KEY (runner_id) REFERENCES runners(id)
+        )
+        """
+    )
+    race_results_cols = {r[1] for r in cur.execute("PRAGMA table_info(race_results)").fetchall()}
+    if "closing_odds" not in race_results_cols:
+        cur.execute("ALTER TABLE race_results ADD COLUMN closing_odds REAL")
 
     cur.execute(
         """
@@ -385,10 +446,35 @@ def ensure_schema_compat() -> None:
             default_min_edge REAL NOT NULL,
             notifications_enabled INTEGER NOT NULL,
             notify_min_edge REAL NOT NULL,
+            theme TEXT NOT NULL DEFAULT 'system',
+            odds_format TEXT NOT NULL DEFAULT 'decimal',
+            default_stake REAL NOT NULL DEFAULT 1.0,
+            bankroll_units REAL NOT NULL DEFAULT 100.0,
+            auto_settle_enabled INTEGER NOT NULL DEFAULT 1,
+            analytics_top_n INTEGER NOT NULL DEFAULT 8,
             updated_at TEXT NOT NULL
         )
         """
     )
+    settings_cols = {r[1] for r in cur.execute("PRAGMA table_info(user_settings)").fetchall()}
+    if "theme" not in settings_cols:
+        cur.execute("ALTER TABLE user_settings ADD COLUMN theme TEXT")
+        cur.execute("UPDATE user_settings SET theme = 'system' WHERE theme IS NULL OR theme = ''")
+    if "odds_format" not in settings_cols:
+        cur.execute("ALTER TABLE user_settings ADD COLUMN odds_format TEXT")
+        cur.execute("UPDATE user_settings SET odds_format = 'decimal' WHERE odds_format IS NULL OR odds_format = ''")
+    if "default_stake" not in settings_cols:
+        cur.execute("ALTER TABLE user_settings ADD COLUMN default_stake REAL")
+        cur.execute("UPDATE user_settings SET default_stake = 1.0 WHERE default_stake IS NULL")
+    if "bankroll_units" not in settings_cols:
+        cur.execute("ALTER TABLE user_settings ADD COLUMN bankroll_units REAL")
+        cur.execute("UPDATE user_settings SET bankroll_units = 100.0 WHERE bankroll_units IS NULL")
+    if "auto_settle_enabled" not in settings_cols:
+        cur.execute("ALTER TABLE user_settings ADD COLUMN auto_settle_enabled INTEGER")
+        cur.execute("UPDATE user_settings SET auto_settle_enabled = 1 WHERE auto_settle_enabled IS NULL")
+    if "analytics_top_n" not in settings_cols:
+        cur.execute("ALTER TABLE user_settings ADD COLUMN analytics_top_n INTEGER")
+        cur.execute("UPDATE user_settings SET analytics_top_n = 8 WHERE analytics_top_n IS NULL")
 
     # Backfill jump_time for legacy race rows.
     races_without_jump = cur.execute(
@@ -453,11 +539,25 @@ def ensure_schema_compat() -> None:
     cur.execute(
         """
         INSERT OR IGNORE INTO user_settings (
-            user_id, timezone, default_min_edge, notifications_enabled, notify_min_edge, updated_at
+            user_id, timezone, default_min_edge, notifications_enabled, notify_min_edge,
+            theme, odds_format, default_stake, bankroll_units, auto_settle_enabled, analytics_top_n,
+            updated_at
         )
-        VALUES ('demo', 'Australia/Sydney', 1.0, 1, 1.0, ?)
+        VALUES ('demo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (now,),
+        (
+            DEFAULT_USER_SETTINGS["timezone"],
+            DEFAULT_USER_SETTINGS["default_min_edge"],
+            DEFAULT_USER_SETTINGS["notifications_enabled"],
+            DEFAULT_USER_SETTINGS["notify_min_edge"],
+            DEFAULT_USER_SETTINGS["theme"],
+            DEFAULT_USER_SETTINGS["odds_format"],
+            DEFAULT_USER_SETTINGS["default_stake"],
+            DEFAULT_USER_SETTINGS["bankroll_units"],
+            DEFAULT_USER_SETTINGS["auto_settle_enabled"],
+            DEFAULT_USER_SETTINGS["analytics_top_n"],
+            now,
+        ),
     )
 
     conn.commit()
@@ -746,6 +846,112 @@ def rebalance_dummy_odds() -> None:
         )
     conn.commit()
     conn.close()
+
+
+def publish_dummy_race_result(conn: sqlite3.Connection, race_id: int) -> dict:
+    race_row = conn.execute(
+        """
+        SELECT id, race_date, track, race_number
+        FROM races
+        WHERE id = ?
+        """,
+        (race_id,),
+    ).fetchone()
+    if not race_row:
+        raise HTTPException(status_code=404, detail="Race not found.")
+
+    runners = conn.execute(
+        """
+        SELECT r.id, r.predicted_price
+        FROM runners r
+        WHERE r.race_id = ?
+        ORDER BY r.horse_number
+        """,
+        (race_id,),
+    ).fetchall()
+    if not runners:
+        raise HTTPException(status_code=404, detail="No runners found for race.")
+
+    rng = random.Random(race_id + len(runners))
+    ranked = []
+    odds_rows = conn.execute(
+        """
+        SELECT runner_id, AVG(current_odds) AS closing_odds
+        FROM odds
+        WHERE runner_id IN (
+            SELECT id FROM runners WHERE race_id = ?
+        )
+        GROUP BY runner_id
+        """,
+        (race_id,),
+    ).fetchall()
+    closing_by_runner = {row["runner_id"]: float(row["closing_odds"] or 0) for row in odds_rows}
+    for row in runners:
+        price = max(float(row["predicted_price"] or 20.0), 1.01)
+        # Favor stronger runners while preserving race-day randomness.
+        score = (1.0 / price) + rng.uniform(-0.12, 0.12)
+        ranked.append((row["id"], score))
+
+    ranked.sort(key=lambda item: item[1], reverse=True)
+    now = datetime.utcnow().isoformat()
+    conn.executemany(
+        """
+        INSERT INTO race_results (race_id, runner_id, finish_pos, closing_odds, official_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(race_id, runner_id) DO UPDATE SET
+          finish_pos = excluded.finish_pos,
+          closing_odds = excluded.closing_odds,
+          official_at = excluded.official_at
+        """,
+        [
+            (race_id, runner_id, idx + 1, closing_by_runner.get(runner_id), now)
+            for idx, (runner_id, _) in enumerate(ranked)
+        ],
+    )
+    return {
+        "race_id": race_row["id"],
+        "race_date": race_row["race_date"],
+        "track": race_row["track"],
+        "race_number": race_row["race_number"],
+        "runner_count": len(ranked),
+    }
+
+
+def settle_pending_tips(conn: sqlite3.Connection, user_id: str = "demo") -> dict:
+    pending = conn.execute(
+        """
+        SELECT t.id, rr.finish_pos
+        FROM tracked_tips t
+        JOIN race_results rr ON rr.race_id = t.race_id AND rr.runner_id = t.runner_id
+        WHERE t.user_id = ? AND t.result = 'pending'
+        """,
+        (user_id,),
+    ).fetchall()
+    if not pending:
+        return {"checked": 0, "settled": 0, "won": 0, "lost": 0}
+
+    now = datetime.utcnow().isoformat()
+    won = 0
+    lost = 0
+    updates = []
+    for row in pending:
+        if int(row["finish_pos"]) == 1:
+            result = "won"
+            won += 1
+        else:
+            result = "lost"
+            lost += 1
+        updates.append((result, now, row["id"]))
+
+    conn.executemany(
+        """
+        UPDATE tracked_tips
+        SET result = ?, settled_at = ?
+        WHERE id = ?
+        """,
+        updates,
+    )
+    return {"checked": len(pending), "settled": len(updates), "won": won, "lost": lost}
 
 
 @app.on_event("startup")
@@ -1161,6 +1367,16 @@ def simulate_odds_move(race_id: int):
     return {"status": "ok", "message": "Dummy odds updated."}
 
 
+@app.post("/api/races/{race_id}/simulate-result")
+def simulate_race_result(race_id: int):
+    conn = get_conn()
+    meta = publish_dummy_race_result(conn, race_id)
+    settlement = settle_pending_tips(conn, user_id="demo")
+    conn.commit()
+    conn.close()
+    return {"status": "ok", "result": meta, "settlement": settlement}
+
+
 @app.post("/api/tips/track")
 def track_tip(payload: TrackTipRequest):
     if payload.bookmaker not in BOOKMAKERS:
@@ -1197,6 +1413,8 @@ def track_tip(payload: TrackTipRequest):
 @app.get("/api/tips/tracked")
 def tracked_tips():
     conn = get_conn()
+    settlement = settle_pending_tips(conn, user_id="demo")
+    conn.commit()
     rows = conn.execute(
         """
         SELECT
@@ -1212,6 +1430,7 @@ def tracked_tips():
           t.odds_at_tip,
           t.stake,
           t.result,
+          t.settled_at,
           t.tracked_at
         FROM tracked_tips t
         JOIN runners r ON r.id = t.runner_id
@@ -1222,7 +1441,7 @@ def tracked_tips():
         """
     ).fetchall()
     conn.close()
-    return {"tips": [dict(r) for r in rows]}
+    return {"tips": [dict(r) for r in rows], "auto_settlement": settlement}
 
 
 @app.post("/api/tips/tracked/{bet_id}/update")
@@ -1305,48 +1524,281 @@ def get_user_settings():
     conn = get_conn()
     row = conn.execute(
         """
-        SELECT user_id, timezone, default_min_edge, notifications_enabled, notify_min_edge, updated_at
+        SELECT
+          user_id,
+          timezone,
+          default_min_edge,
+          notifications_enabled,
+          notify_min_edge,
+          theme,
+          odds_format,
+          default_stake,
+          bankroll_units,
+          auto_settle_enabled,
+          analytics_top_n,
+          updated_at
         FROM user_settings
         WHERE user_id = 'demo'
         """
     ).fetchone()
+    if not row:
+        now = datetime.utcnow().isoformat()
+        conn.execute(
+            """
+            INSERT INTO user_settings (
+              user_id, timezone, default_min_edge, notifications_enabled, notify_min_edge,
+              theme, odds_format, default_stake, bankroll_units, auto_settle_enabled, analytics_top_n, updated_at
+            )
+            VALUES ('demo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                DEFAULT_USER_SETTINGS["timezone"],
+                DEFAULT_USER_SETTINGS["default_min_edge"],
+                DEFAULT_USER_SETTINGS["notifications_enabled"],
+                DEFAULT_USER_SETTINGS["notify_min_edge"],
+                DEFAULT_USER_SETTINGS["theme"],
+                DEFAULT_USER_SETTINGS["odds_format"],
+                DEFAULT_USER_SETTINGS["default_stake"],
+                DEFAULT_USER_SETTINGS["bankroll_units"],
+                DEFAULT_USER_SETTINGS["auto_settle_enabled"],
+                DEFAULT_USER_SETTINGS["analytics_top_n"],
+                now,
+            ),
+        )
+        conn.commit()
+        row = conn.execute(
+            """
+            SELECT
+              user_id,
+              timezone,
+              default_min_edge,
+              notifications_enabled,
+              notify_min_edge,
+              theme,
+              odds_format,
+              default_stake,
+              bankroll_units,
+              auto_settle_enabled,
+              analytics_top_n,
+              updated_at
+            FROM user_settings
+            WHERE user_id = 'demo'
+            """
+        ).fetchone()
     conn.close()
     return {"settings": dict(row) if row else None}
 
 
 @app.post("/api/user/settings")
 def update_user_settings(payload: UpdateUserSettingsRequest):
-    timezone = payload.timezone.strip() or "Australia/Sydney"
-    default_min_edge = float(payload.default_min_edge)
-    notifications_enabled = int(payload.notifications_enabled)
-    notify_min_edge = float(payload.notify_min_edge)
-    if notifications_enabled not in {0, 1}:
-        raise HTTPException(status_code=400, detail="notifications_enabled must be 0 or 1.")
     conn = get_conn()
+    existing = conn.execute(
+        """
+        SELECT
+          timezone,
+          default_min_edge,
+          notifications_enabled,
+          notify_min_edge,
+          theme,
+          odds_format,
+          default_stake,
+          bankroll_units,
+          auto_settle_enabled,
+          analytics_top_n
+        FROM user_settings
+        WHERE user_id = 'demo'
+        """
+    ).fetchone()
+    conn.close()
+    merged = dict(DEFAULT_USER_SETTINGS)
+    if existing:
+        merged.update(dict(existing))
+
+    if payload.timezone is not None:
+        merged["timezone"] = payload.timezone.strip() or DEFAULT_USER_SETTINGS["timezone"]
+    if payload.default_min_edge is not None:
+        merged["default_min_edge"] = float(payload.default_min_edge)
+    if payload.notifications_enabled is not None:
+        merged["notifications_enabled"] = int(payload.notifications_enabled)
+    if payload.notify_min_edge is not None:
+        merged["notify_min_edge"] = float(payload.notify_min_edge)
+    if payload.theme is not None:
+        merged["theme"] = payload.theme.strip().lower()
+    if payload.odds_format is not None:
+        merged["odds_format"] = payload.odds_format.strip().lower()
+    if payload.default_stake is not None:
+        merged["default_stake"] = float(payload.default_stake)
+    if payload.bankroll_units is not None:
+        merged["bankroll_units"] = float(payload.bankroll_units)
+    if payload.auto_settle_enabled is not None:
+        merged["auto_settle_enabled"] = int(payload.auto_settle_enabled)
+    if payload.analytics_top_n is not None:
+        merged["analytics_top_n"] = int(payload.analytics_top_n)
+
+    if merged["notifications_enabled"] not in {0, 1}:
+        raise HTTPException(status_code=400, detail="notifications_enabled must be 0 or 1.")
+    if merged["auto_settle_enabled"] not in {0, 1}:
+        raise HTTPException(status_code=400, detail="auto_settle_enabled must be 0 or 1.")
+    if merged["theme"] not in {"system", "light", "dark"}:
+        raise HTTPException(status_code=400, detail="theme must be one of: system, light, dark.")
+    if merged["odds_format"] not in {"decimal", "american"}:
+        raise HTTPException(status_code=400, detail="odds_format must be one of: decimal, american.")
+    if merged["default_min_edge"] < -100:
+        raise HTTPException(status_code=400, detail="default_min_edge is too low.")
+    if merged["notify_min_edge"] < -100:
+        raise HTTPException(status_code=400, detail="notify_min_edge is too low.")
+    if merged["default_stake"] < 0:
+        raise HTTPException(status_code=400, detail="default_stake must be non-negative.")
+    if merged["bankroll_units"] < 0:
+        raise HTTPException(status_code=400, detail="bankroll_units must be non-negative.")
+    if merged["analytics_top_n"] < 3 or merged["analytics_top_n"] > 20:
+        raise HTTPException(status_code=400, detail="analytics_top_n must be between 3 and 20.")
+
     now = datetime.utcnow().isoformat()
+    conn = get_conn()
     conn.execute(
         """
         INSERT INTO user_settings (
-            user_id, timezone, default_min_edge, notifications_enabled, notify_min_edge, updated_at
+            user_id, timezone, default_min_edge, notifications_enabled, notify_min_edge,
+            theme, odds_format, default_stake, bankroll_units, auto_settle_enabled, analytics_top_n, updated_at
         )
-        VALUES ('demo', ?, ?, ?, ?, ?)
+        VALUES ('demo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET
           timezone = excluded.timezone,
           default_min_edge = excluded.default_min_edge,
           notifications_enabled = excluded.notifications_enabled,
           notify_min_edge = excluded.notify_min_edge,
+          theme = excluded.theme,
+          odds_format = excluded.odds_format,
+          default_stake = excluded.default_stake,
+          bankroll_units = excluded.bankroll_units,
+          auto_settle_enabled = excluded.auto_settle_enabled,
+          analytics_top_n = excluded.analytics_top_n,
           updated_at = excluded.updated_at
         """,
-        (timezone, default_min_edge, notifications_enabled, notify_min_edge, now),
+        (
+            merged["timezone"],
+            merged["default_min_edge"],
+            merged["notifications_enabled"],
+            merged["notify_min_edge"],
+            merged["theme"],
+            merged["odds_format"],
+            merged["default_stake"],
+            merged["bankroll_units"],
+            merged["auto_settle_enabled"],
+            merged["analytics_top_n"],
+            now,
+        ),
     )
     conn.commit()
     conn.close()
     return {"status": "ok"}
 
 
+@app.post("/api/user/settings/reset")
+def reset_user_settings():
+    conn = get_conn()
+    now = datetime.utcnow().isoformat()
+    conn.execute(
+        """
+        INSERT INTO user_settings (
+            user_id, timezone, default_min_edge, notifications_enabled, notify_min_edge,
+            theme, odds_format, default_stake, bankroll_units, auto_settle_enabled, analytics_top_n, updated_at
+        )
+        VALUES ('demo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          timezone = excluded.timezone,
+          default_min_edge = excluded.default_min_edge,
+          notifications_enabled = excluded.notifications_enabled,
+          notify_min_edge = excluded.notify_min_edge,
+          theme = excluded.theme,
+          odds_format = excluded.odds_format,
+          default_stake = excluded.default_stake,
+          bankroll_units = excluded.bankroll_units,
+          auto_settle_enabled = excluded.auto_settle_enabled,
+          analytics_top_n = excluded.analytics_top_n,
+          updated_at = excluded.updated_at
+        """,
+        (
+            DEFAULT_USER_SETTINGS["timezone"],
+            DEFAULT_USER_SETTINGS["default_min_edge"],
+            DEFAULT_USER_SETTINGS["notifications_enabled"],
+            DEFAULT_USER_SETTINGS["notify_min_edge"],
+            DEFAULT_USER_SETTINGS["theme"],
+            DEFAULT_USER_SETTINGS["odds_format"],
+            DEFAULT_USER_SETTINGS["default_stake"],
+            DEFAULT_USER_SETTINGS["bankroll_units"],
+            DEFAULT_USER_SETTINGS["auto_settle_enabled"],
+            DEFAULT_USER_SETTINGS["analytics_top_n"],
+            now,
+        ),
+    )
+    conn.commit()
+    row = conn.execute(
+        """
+        SELECT
+          user_id,
+          timezone,
+          default_min_edge,
+          notifications_enabled,
+          notify_min_edge,
+          theme,
+          odds_format,
+          default_stake,
+          bankroll_units,
+          auto_settle_enabled,
+          analytics_top_n,
+          updated_at
+        FROM user_settings
+        WHERE user_id = 'demo'
+        """
+    ).fetchone()
+    conn.close()
+    return {"status": "ok", "settings": dict(row) if row else None}
+
+
+@app.get("/api/user/settings/export")
+def export_user_settings():
+    conn = get_conn()
+    profile = conn.execute(
+        """
+        SELECT user_id, display_name, email, plan, created_at, updated_at
+        FROM user_profiles
+        WHERE user_id = 'demo'
+        """
+    ).fetchone()
+    settings = conn.execute(
+        """
+        SELECT
+          user_id,
+          timezone,
+          default_min_edge,
+          notifications_enabled,
+          notify_min_edge,
+          theme,
+          odds_format,
+          default_stake,
+          bankroll_units,
+          auto_settle_enabled,
+          analytics_top_n,
+          updated_at
+        FROM user_settings
+        WHERE user_id = 'demo'
+        """
+    ).fetchone()
+    conn.close()
+    return {
+        "exported_at": datetime.utcnow().isoformat(),
+        "profile": dict(profile) if profile else None,
+        "settings": dict(settings) if settings else None,
+    }
+
+
 @app.get("/api/user/bets")
 def get_user_bets():
     conn = get_conn()
+    settlement = settle_pending_tips(conn, user_id="demo")
+    conn.commit()
     rows = conn.execute(
         """
         SELECT
@@ -1355,11 +1807,15 @@ def get_user_bets():
           t.race_id,
           ra.track,
           ra.race_number,
+          ra.distance_m,
+          r.horse_number AS back_number,
+          r.barrier,
           r.horse_name,
           t.bookmaker,
           t.edge_pct,
           t.odds_at_tip,
           t.stake,
+          t.settled_at,
           t.result
         FROM tracked_tips t
         JOIN runners r ON r.id = t.runner_id
@@ -1370,7 +1826,168 @@ def get_user_bets():
         """
     ).fetchall()
     conn.close()
-    return {"bets": [dict(r) for r in rows]}
+    return {"bets": [dict(r) for r in rows], "auto_settlement": settlement}
+
+
+@app.post("/api/user/bets/settle-pending")
+def settle_pending_bets():
+    conn = get_conn()
+    settlement = settle_pending_tips(conn, user_id="demo")
+    conn.commit()
+    conn.close()
+    return {"status": "ok", "settlement": settlement}
+
+
+@app.get("/api/user/bets/analytics")
+def get_user_bets_analytics():
+    conn = get_conn()
+    settlement = settle_pending_tips(conn, user_id="demo")
+    conn.commit()
+    rows = conn.execute(
+        """
+        SELECT
+          t.id,
+          t.tracked_at,
+          t.race_id,
+          t.bookmaker,
+          t.odds_at_tip,
+          t.stake,
+          t.result,
+          ra.track,
+          rr.closing_odds
+        FROM tracked_tips t
+        JOIN races ra ON ra.id = t.race_id
+        LEFT JOIN race_results rr ON rr.race_id = t.race_id
+          AND rr.runner_id = t.runner_id
+        WHERE t.user_id = 'demo'
+        ORDER BY t.tracked_at ASC
+        """
+    ).fetchall()
+    conn.close()
+
+    bets = [dict(r) for r in rows]
+    settled = [b for b in bets if b["result"] in {"won", "lost"}]
+    wins = [b for b in settled if b["result"] == "won"]
+    losses = [b for b in settled if b["result"] == "lost"]
+
+    total_stake = sum(float(b.get("stake") or 1.0) if float(b.get("stake") or 0) > 0 else 1.0 for b in settled)
+
+    def stake_of(b: dict) -> float:
+        st = float(b.get("stake") or 0)
+        return st if st > 0 else 1.0
+
+    pnl_values = []
+    for b in settled:
+        stake = stake_of(b)
+        odds = float(b.get("odds_at_tip") or 0)
+        pnl = (stake * (odds - 1.0)) if b["result"] == "won" else (-stake)
+        pnl_values.append(pnl)
+
+    profit_units = sum(pnl_values)
+    roi_pct = (profit_units / total_stake) * 100.0 if total_stake > 0 else 0.0
+    win_rate_pct = (len(wins) / len(settled)) * 100.0 if settled else 0.0
+
+    clv_rows = [b for b in settled if b.get("closing_odds") and float(b["closing_odds"]) > 1.0]
+    clv_values = []
+    for b in clv_rows:
+        tip_odds = float(b.get("odds_at_tip") or 0)
+        closing = float(b.get("closing_odds") or 0)
+        clv = ((tip_odds / closing) - 1.0) * 100.0
+        clv_values.append(clv)
+    avg_clv_pct = sum(clv_values) / len(clv_values) if clv_values else 0.0
+
+    equity = 0.0
+    peak = 0.0
+    max_drawdown = 0.0
+    for pnl in pnl_values:
+        equity += pnl
+        peak = max(peak, equity)
+        drawdown = peak - equity
+        max_drawdown = max(max_drawdown, drawdown)
+
+    best_win_streak = 0
+    best_loss_streak = 0
+    curr_win_streak = 0
+    curr_loss_streak = 0
+    for b in settled:
+        if b["result"] == "won":
+            curr_win_streak += 1
+            curr_loss_streak = 0
+        else:
+            curr_loss_streak += 1
+            curr_win_streak = 0
+        best_win_streak = max(best_win_streak, curr_win_streak)
+        best_loss_streak = max(best_loss_streak, curr_loss_streak)
+
+    current_streak_type = "none"
+    current_streak = 0
+    for b in reversed(settled):
+        if b["result"] == "won":
+            if current_streak_type in {"none", "won"}:
+                current_streak_type = "won"
+                current_streak += 1
+            else:
+                break
+        else:
+            if current_streak_type in {"none", "lost"}:
+                current_streak_type = "lost"
+                current_streak += 1
+            else:
+                break
+
+    by_track: dict[str, dict] = {}
+    by_book: dict[str, dict] = {}
+    for b in settled:
+        stake = stake_of(b)
+        odds = float(b.get("odds_at_tip") or 0)
+        pnl = (stake * (odds - 1.0)) if b["result"] == "won" else (-stake)
+
+        track = b["track"]
+        by_track.setdefault(track, {"track": track, "bets": 0, "profit_units": 0.0})
+        by_track[track]["bets"] += 1
+        by_track[track]["profit_units"] += pnl
+
+        book = b["bookmaker"]
+        by_book.setdefault(book, {"bookmaker": book, "bets": 0, "profit_units": 0.0})
+        by_book[book]["bets"] += 1
+        by_book[book]["profit_units"] += pnl
+
+    track_perf = []
+    for row in by_track.values():
+        row["roi_pct"] = round((row["profit_units"] / max(row["bets"], 1)) * 100.0, 2)
+        row["profit_units"] = round(row["profit_units"], 2)
+        track_perf.append(row)
+    track_perf.sort(key=lambda x: x["profit_units"], reverse=True)
+
+    book_perf = []
+    for row in by_book.values():
+        row["roi_pct"] = round((row["profit_units"] / max(row["bets"], 1)) * 100.0, 2)
+        row["profit_units"] = round(row["profit_units"], 2)
+        book_perf.append(row)
+    book_perf.sort(key=lambda x: x["profit_units"], reverse=True)
+
+    return {
+        "auto_settlement": settlement,
+        "summary": {
+            "total_bets": len(bets),
+            "settled_bets": len(settled),
+            "pending_bets": len(bets) - len(settled),
+            "wins": len(wins),
+            "losses": len(losses),
+            "win_rate_pct": round(win_rate_pct, 2),
+            "total_stake_units": round(total_stake, 2),
+            "profit_units": round(profit_units, 2),
+            "roi_pct": round(roi_pct, 2),
+            "avg_clv_pct": round(avg_clv_pct, 2),
+            "max_drawdown_units": round(max_drawdown, 2),
+            "best_win_streak": best_win_streak,
+            "best_loss_streak": best_loss_streak,
+            "current_streak_type": current_streak_type,
+            "current_streak": current_streak,
+        },
+        "by_track": track_perf,
+        "by_bookmaker": book_perf,
+    }
 
 
 @app.get("/api/stats/filters")
@@ -1388,26 +2005,63 @@ def get_stats_filters():
 
 
 @app.get("/api/stats/dashboard")
-def get_stats_dashboard(track: Optional[str] = Query(default=None)):
+def get_stats_dashboard(
+    track: Optional[str] = Query(default=None),
+    min_distance: Optional[int] = Query(default=None),
+    max_distance: Optional[int] = Query(default=None),
+    min_barrier: Optional[int] = Query(default=None),
+    max_barrier: Optional[int] = Query(default=None),
+    min_back_number: Optional[int] = Query(default=None),
+    max_back_number: Optional[int] = Query(default=None),
+):
     conn = get_conn()
 
-    if track:
-        track_filter = "WHERE ra.track = ?"
-        params = [track]
-    else:
-        track_filter = ""
+    def build_filters(track_col: str, distance_col: str, runner_col_prefix: str):
+        clauses = []
         params = []
+        if track:
+            clauses.append(f"{track_col} = ?")
+            params.append(track)
+        if min_distance is not None:
+            clauses.append(f"{distance_col} >= ?")
+            params.append(min_distance)
+        if max_distance is not None:
+            clauses.append(f"{distance_col} <= ?")
+            params.append(max_distance)
+        if min_barrier is not None:
+            clauses.append(f"{runner_col_prefix}.barrier >= ?")
+            params.append(min_barrier)
+        if max_barrier is not None:
+            clauses.append(f"{runner_col_prefix}.barrier <= ?")
+            params.append(max_barrier)
+        if min_back_number is not None:
+            clauses.append(f"{runner_col_prefix}.horse_number >= ?")
+            params.append(min_back_number)
+        if max_back_number is not None:
+            clauses.append(f"{runner_col_prefix}.horse_number <= ?")
+            params.append(max_back_number)
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        return where_sql, params
+
+    track_filter, params = build_filters("ra.track", "h.distance_m", "r")
 
     track_summary = conn.execute(
         f"""
         SELECT
           ra.track,
           COUNT(DISTINCT ra.id) AS races,
+          COUNT(h.id) AS runs,
+          SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) AS wins,
+          ROUND((SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(h.id), 2) AS strike_rate_pct,
+          ROUND((SUM(CASE WHEN h.finish_pos = 1 THEN h.starting_price ELSE 0 END) - COUNT(h.id)), 2) AS profit_units,
+          ROUND(((SUM(CASE WHEN h.finish_pos = 1 THEN h.starting_price ELSE 0 END) - COUNT(h.id)) * 100.0) / COUNT(h.id), 2) AS roi_pct,
           ROUND(AVG(ra.starters), 2) AS avg_starters,
           ROUND(AVG(ra.prize_pool), 2) AS avg_prize_pool,
           ROUND(AVG(CASE WHEN ra.track_rating LIKE 'Good%' THEN 1.0 ELSE 0.0 END) * 100.0, 2) AS good_rate_pct,
           ROUND(AVG(CASE WHEN ra.track_rating LIKE 'Soft%' THEN 1.0 ELSE 0.0 END) * 100.0, 2) AS soft_rate_pct
         FROM races ra
+        JOIN runners r ON r.race_id = ra.id
+        JOIN runner_history h ON h.runner_id = r.id
         {track_filter}
         GROUP BY ra.track
         ORDER BY races DESC, ra.track
@@ -1415,12 +2069,7 @@ def get_stats_dashboard(track: Optional[str] = Query(default=None)):
         params,
     ).fetchall()
 
-    if track:
-        bias_filter = "WHERE h.track = ?"
-        bias_params = [track]
-    else:
-        bias_filter = ""
-        bias_params = []
+    bias_filter, bias_params = build_filters("h.track", "h.distance_m", "r")
 
     barrier_bias = conn.execute(
         f"""
@@ -1433,6 +2082,8 @@ def get_stats_dashboard(track: Optional[str] = Query(default=None)):
           END AS barrier_bucket,
           COUNT(*) AS runs,
           SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) AS wins,
+          ROUND((SUM(CASE WHEN h.finish_pos = 1 THEN h.starting_price ELSE 0 END) - COUNT(*)), 2) AS profit_units,
+          ROUND(((SUM(CASE WHEN h.finish_pos = 1 THEN h.starting_price ELSE 0 END) - COUNT(*)) * 100.0) / COUNT(*), 2) AS roi_pct,
           ROUND(AVG(h.finish_pos), 2) AS avg_finish_pos,
           ROUND((SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS strike_rate_pct
         FROM runner_history h
@@ -1445,7 +2096,7 @@ def get_stats_dashboard(track: Optional[str] = Query(default=None)):
     ).fetchall()
 
     jockey_stats = conn.execute(
-        """
+        f"""
         SELECT
           h.jockey,
           COUNT(*) AS runs,
@@ -1477,77 +2128,89 @@ def get_stats_dashboard(track: Optional[str] = Query(default=None)):
             END, 2
           ) AS short_fav_roi_pct
         FROM runner_history h
+        JOIN runners r ON r.id = h.runner_id
+        {bias_filter}
         GROUP BY h.jockey
         ORDER BY wins DESC, strike_rate_pct DESC
         LIMIT 20
-        """
+        """,
+        bias_params,
     ).fetchall()
 
     trainer_stats = conn.execute(
-        """
+        f"""
         SELECT
-          t.trainer,
+          r.trainer,
           COUNT(*) AS runs,
-          SUM(CASE WHEN t.finish_pos = 1 THEN 1 ELSE 0 END) AS wins,
-          ROUND(AVG(t.finish_pos), 2) AS avg_finish_pos,
-          ROUND((SUM(CASE WHEN t.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS strike_rate_pct,
-          ROUND((SUM(CASE WHEN t.finish_pos = 1 THEN t.starting_price ELSE 0 END) - COUNT(*)), 2) AS profit_units,
-          ROUND(((SUM(CASE WHEN t.finish_pos = 1 THEN t.starting_price ELSE 0 END) - COUNT(*)) * 100.0) / COUNT(*), 2) AS roi_pct,
-          ROUND((SUM(CASE WHEN t.finish_pos <= 3 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS top3_rate_pct,
-          SUM(CASE WHEN t.starting_price <= 3.0 THEN 1 ELSE 0 END) AS short_fav_runs,
-          SUM(CASE WHEN t.starting_price <= 3.0 AND t.finish_pos = 1 THEN 1 ELSE 0 END) AS short_fav_wins,
+          SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) AS wins,
+          ROUND(AVG(h.finish_pos), 2) AS avg_finish_pos,
+          ROUND((SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS strike_rate_pct,
+          ROUND((SUM(CASE WHEN h.finish_pos = 1 THEN h.starting_price ELSE 0 END) - COUNT(*)), 2) AS profit_units,
+          ROUND(((SUM(CASE WHEN h.finish_pos = 1 THEN h.starting_price ELSE 0 END) - COUNT(*)) * 100.0) / COUNT(*), 2) AS roi_pct,
+          ROUND((SUM(CASE WHEN h.finish_pos <= 3 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS top3_rate_pct,
+          SUM(CASE WHEN h.starting_price <= 3.0 THEN 1 ELSE 0 END) AS short_fav_runs,
+          SUM(CASE WHEN h.starting_price <= 3.0 AND h.finish_pos = 1 THEN 1 ELSE 0 END) AS short_fav_wins,
           ROUND(
             CASE
-              WHEN SUM(CASE WHEN t.starting_price <= 3.0 THEN 1 ELSE 0 END) = 0 THEN 0
+              WHEN SUM(CASE WHEN h.starting_price <= 3.0 THEN 1 ELSE 0 END) = 0 THEN 0
               ELSE (
-                SUM(CASE WHEN t.starting_price <= 3.0 AND t.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0
-              ) / SUM(CASE WHEN t.starting_price <= 3.0 THEN 1 ELSE 0 END)
+                SUM(CASE WHEN h.starting_price <= 3.0 AND h.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0
+              ) / SUM(CASE WHEN h.starting_price <= 3.0 THEN 1 ELSE 0 END)
             END, 2
           ) AS short_fav_sr_pct,
           ROUND(
             CASE
-              WHEN SUM(CASE WHEN t.starting_price <= 3.0 THEN 1 ELSE 0 END) = 0 THEN 0
+              WHEN SUM(CASE WHEN h.starting_price <= 3.0 THEN 1 ELSE 0 END) = 0 THEN 0
               ELSE (
                 (
-                  SUM(CASE WHEN t.starting_price <= 3.0 AND t.finish_pos = 1 THEN t.starting_price ELSE 0 END)
-                  - SUM(CASE WHEN t.starting_price <= 3.0 THEN 1 ELSE 0 END)
+                  SUM(CASE WHEN h.starting_price <= 3.0 AND h.finish_pos = 1 THEN h.starting_price ELSE 0 END)
+                  - SUM(CASE WHEN h.starting_price <= 3.0 THEN 1 ELSE 0 END)
                 ) * 100.0
-              ) / SUM(CASE WHEN t.starting_price <= 3.0 THEN 1 ELSE 0 END)
+              ) / SUM(CASE WHEN h.starting_price <= 3.0 THEN 1 ELSE 0 END)
             END, 2
           ) AS short_fav_roi_pct
-        FROM trainer_history t
-        GROUP BY t.trainer
+        FROM runner_history h
+        JOIN runners r ON r.id = h.runner_id
+        {bias_filter}
+        GROUP BY r.trainer
         ORDER BY wins DESC, strike_rate_pct DESC
         LIMIT 20
-        """
+        """,
+        bias_params,
     ).fetchall()
 
     jockey_leaderboard = conn.execute(
-        """
+        f"""
         SELECT
           h.jockey AS name,
           SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) AS wins,
           COUNT(*) AS runs,
           ROUND((SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS strike_rate_pct
         FROM runner_history h
+        JOIN runners r ON r.id = h.runner_id
+        {bias_filter}
         GROUP BY h.jockey
         ORDER BY wins DESC, strike_rate_pct DESC
         LIMIT 10
-        """
+        """,
+        bias_params,
     ).fetchall()
 
     trainer_leaderboard = conn.execute(
-        """
+        f"""
         SELECT
-          t.trainer AS name,
-          SUM(CASE WHEN t.finish_pos = 1 THEN 1 ELSE 0 END) AS wins,
+          r.trainer AS name,
+          SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) AS wins,
           COUNT(*) AS runs,
-          ROUND((SUM(CASE WHEN t.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS strike_rate_pct
-        FROM trainer_history t
-        GROUP BY t.trainer
+          ROUND((SUM(CASE WHEN h.finish_pos = 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS strike_rate_pct
+        FROM runner_history h
+        JOIN runners r ON r.id = h.runner_id
+        {bias_filter}
+        GROUP BY r.trainer
         ORDER BY wins DESC, strike_rate_pct DESC
         LIMIT 10
-        """
+        """,
+        bias_params,
     ).fetchall()
 
     conn.close()
@@ -1566,14 +2229,15 @@ def get_stats_dashboard(track: Optional[str] = Query(default=None)):
 
 @app.post("/api/user/bets/{bet_id}/result")
 def update_bet_result(bet_id: int, payload: UpdateBetResultRequest):
+    settled_at = datetime.utcnow().isoformat() if payload.result in {"won", "lost"} else None
     conn = get_conn()
     conn.execute(
         """
         UPDATE tracked_tips
-        SET result = ?
+        SET result = ?, settled_at = ?
         WHERE id = ? AND user_id = 'demo'
         """,
-        (payload.result, bet_id),
+        (payload.result, settled_at, bet_id),
     )
     conn.commit()
     conn.close()

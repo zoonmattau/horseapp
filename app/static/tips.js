@@ -18,6 +18,16 @@ let selectedBooks = new Set();
 let timeSortAsc = true;
 let pendingTrackPayload = null;
 
+function applyThemeFromPreference() {
+  const pref = (localStorage.getItem("horse_theme_pref") || "system").toLowerCase();
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  if (pref === "light" || pref === "dark") {
+    document.documentElement.setAttribute("data-theme", pref);
+  } else {
+    document.documentElement.setAttribute("data-theme", mq.matches ? "dark" : "light");
+  }
+}
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -194,6 +204,7 @@ trackModal?.addEventListener("click", (e) => {
 });
 
 async function init() {
+  applyThemeFromPreference();
   raceDateInput.value = todayIso();
   await loadBookmakers();
   await loadDailyTips();

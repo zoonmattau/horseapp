@@ -23,7 +23,7 @@
       <a href="/settings" class="toggle-link">Settings</a>
     </nav>
 
-    <section class="panel">
+    <section class="panel filters-shell">
       <div class="panel-head">
         <h2>Bet Log</h2>
         <div class="bets-log-actions">
@@ -37,6 +37,58 @@
           </select>
           <button id="toggleAnalytics">Show Analytics</button>
         </div>
+      </div>
+      <div class="filters-head">
+        <h2 class="filters-title">Filters</h2>
+        <div id="betsFilterSummary" class="filters-summary">No active filters</div>
+      </div>
+      <div id="betsFilterPills" class="filter-pills"></div>
+      <div class="row">
+        <label for="betsTrackFilter">Track</label>
+        <select id="betsTrackFilter">
+          <option value="all">All Tracks</option>
+        </select>
+        <label for="betsBookFilter">Book</label>
+        <select id="betsBookFilter">
+          <option value="all">All Books</option>
+        </select>
+        <label for="betsResultFilter">Result</label>
+        <select id="betsResultFilter">
+          <option value="all">All Results</option>
+          <option value="won">Won</option>
+          <option value="lost">Lost</option>
+          <option value="pending">Pending</option>
+          <option value="settled">Settled</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="betsMinEdgeFilter">Min Edge %</label>
+        <input id="betsMinEdgeFilter" type="number" step="0.1" placeholder="any" />
+        <label for="betsMinOddsFilter">Min Odds</label>
+        <input id="betsMinOddsFilter" type="number" step="0.01" min="1.01" placeholder="any" />
+        <label for="betsMaxOddsFilter">Max Odds</label>
+        <input id="betsMaxOddsFilter" type="number" step="0.01" min="1.01" placeholder="any" />
+      </div>
+      <div class="row">
+        <label for="betsMinBackNumberFilter">Min Back #</label>
+        <input id="betsMinBackNumberFilter" type="number" min="1" step="1" placeholder="any" />
+        <label for="betsMaxBackNumberFilter">Max Back #</label>
+        <input id="betsMaxBackNumberFilter" type="number" min="1" step="1" placeholder="any" />
+        <label for="betsMinBarrierFilter">Min Barrier</label>
+        <input id="betsMinBarrierFilter" type="number" min="1" step="1" placeholder="any" />
+        <label for="betsMaxBarrierFilter">Max Barrier</label>
+        <input id="betsMaxBarrierFilter" type="number" min="1" step="1" placeholder="any" />
+      </div>
+      <div class="row">
+        <label for="betsMinDistanceFilter">Min Distance</label>
+        <input id="betsMinDistanceFilter" type="number" min="800" step="100" placeholder="meters" />
+        <label for="betsMaxDistanceFilter">Max Distance</label>
+        <input id="betsMaxDistanceFilter" type="number" min="800" step="100" placeholder="meters" />
+      </div>
+      <div class="row actions">
+        <label for="betsSearchFilter">Search</label>
+        <input id="betsSearchFilter" type="text" placeholder="horse / track / bookmaker" />
+        <button id="clearBetsFilters" type="button">Clear Filters</button>
       </div>
       <div id="betsTotals" class="bets-totals"></div>
       <table id="betsTable">
@@ -63,19 +115,35 @@
       <h2>Bet Analytics</h2>
 
       <details open>
-        <summary>Core Metrics</summary>
+        <summary>Market Metrics (Auto-Settled)</summary>
+        <div id="marketAnalyticsMeta" class="muted"></div>
+        <div id="marketKpiGrid" class="market-kpi-grid"></div>
+      </details>
+
+      <details open>
+        <summary>Market Profit by Bookmaker</summary>
+        <div id="marketBookmakerGraph" class="graph-list"></div>
+      </details>
+
+      <details open>
+        <summary>Market Profit by Track</summary>
+        <div id="marketTrackGraph" class="graph-list"></div>
+      </details>
+
+      <details open>
+        <summary>Filtered Core Metrics</summary>
         <table id="metricsTable">
           <tbody></tbody>
         </table>
       </details>
 
       <details open>
-        <summary>Profit by Bookmaker</summary>
+        <summary>Filtered Profit by Bookmaker</summary>
         <div id="bookmakerGraph" class="graph-list"></div>
       </details>
 
       <details>
-        <summary>Profit by Track</summary>
+        <summary>Filtered Profit by Track</summary>
         <div id="trackGraph" class="graph-list"></div>
       </details>
 

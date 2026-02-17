@@ -3,247 +3,235 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stats</title>
+  <title>Stats - HorseEdge AU</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260218a" />
 </head>
 <body>
+  <nav class="topbar" aria-label="Main navigation">
+    <a href="/" class="topbar-brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      HorseEdge
+    </a>
+    <div class="topbar-links">
+      <a href="/" class="topbar-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Race Board
+      </a>
+      <a href="/tips" class="topbar-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg>
+        Daily Tips
+      </a>
+      <a href="/my-bets" class="topbar-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        My Bets
+      </a>
+      <a href="/stats" class="topbar-link active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Stats
+      </a>
+      <a href="/settings" class="topbar-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Settings
+      </a>
+    </div>
+  </nav>
+
+  <nav class="bottom-tabs" aria-label="Mobile navigation">
+    <div class="bottom-tabs-inner">
+      <a href="/" class="bottom-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Board
+      </a>
+      <a href="/tips" class="bottom-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg>
+        Tips
+      </a>
+      <a href="/my-bets" class="bottom-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        Bets
+      </a>
+      <a href="/stats" class="bottom-tab active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Stats
+      </a>
+      <a href="/settings" class="bottom-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Settings
+      </a>
+    </div>
+  </nav>
+
   <main class="page page-stats">
-    <header class="header">
-      <h1>HorseEdge AU</h1>
-      <p>Track intelligence, historical bias, and performance leaderboards.</p>
-    </header>
-    <nav class="top-toggle" aria-label="View toggle">
-      <a href="/" class="toggle-link">Race Board</a>
-      <a href="/tips" class="toggle-link">Daily Tips</a>
-      <a href="/my-bets" class="toggle-link">My Bets</a>
-      <a href="/stats" class="toggle-link active">Stats</a>
-      <a href="/settings" class="toggle-link">Settings</a>
-    </nav>
+    <details class="filter-panel" id="statsFilterPanel">
+      <summary>Filters <span id="statsFilterSummary" class="filters-summary" style="margin-left:auto">No active filters</span></summary>
+      <div class="filter-panel-body">
+        <div id="statsFilterPills" class="filter-pills"></div>
+        <div class="filter-grid">
+          <div class="filter-field">
+            <label for="trackFilter">Track</label>
+            <select id="trackFilter"></select>
+          </div>
+          <div class="filter-field">
+            <label for="surfaceFilter">Surface</label>
+            <select id="surfaceFilter">
+              <option value="all">All</option>
+              <option value="good">Good</option>
+              <option value="soft">Soft</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label for="roiModeFilter">ROI Mode</label>
+            <select id="roiModeFilter">
+              <option value="all">All</option>
+              <option value="winning">Winning only</option>
+              <option value="losing">Losing only</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label for="minRunsFilter">Min Runs</label>
+            <input id="minRunsFilter" type="number" min="0" step="1" value="0" />
+          </div>
+          <div class="filter-field">
+            <label for="minBackNumberFilter">Min Back #</label>
+            <input id="minBackNumberFilter" type="number" min="1" step="1" value="" placeholder="any" />
+          </div>
+          <div class="filter-field">
+            <label for="maxBackNumberFilter">Max Back #</label>
+            <input id="maxBackNumberFilter" type="number" min="1" step="1" value="" placeholder="any" />
+          </div>
+          <div class="filter-field">
+            <label for="minBarrierFilter">Min Barrier</label>
+            <input id="minBarrierFilter" type="number" min="1" step="1" value="" placeholder="any" />
+          </div>
+          <div class="filter-field">
+            <label for="maxBarrierFilter">Max Barrier</label>
+            <input id="maxBarrierFilter" type="number" min="1" step="1" value="" placeholder="any" />
+          </div>
+          <div class="filter-field">
+            <label for="minDistanceFilter">Min Distance</label>
+            <input id="minDistanceFilter" type="number" min="800" step="100" value="" placeholder="meters" />
+          </div>
+          <div class="filter-field">
+            <label for="maxDistanceFilter">Max Distance</label>
+            <input id="maxDistanceFilter" type="number" min="800" step="100" value="" placeholder="meters" />
+          </div>
+          <div class="filter-field">
+            <label for="minRoiFilter">Min ROI %</label>
+            <input id="minRoiFilter" type="number" step="0.1" value="" placeholder="any" />
+          </div>
+          <div class="filter-field">
+            <label for="maxRoiFilter">Max ROI %</label>
+            <input id="maxRoiFilter" type="number" step="0.1" value="" placeholder="any" />
+          </div>
+          <div class="filter-field">
+            <label for="nameSearchFilter">Name Search</label>
+            <input id="nameSearchFilter" type="text" placeholder="jockey or trainer..." />
+          </div>
+          <div class="filter-field">
+            <label for="topNFilter">Chart Rows</label>
+            <select id="topNFilter">
+              <option value="6">6</option>
+              <option value="8" selected>8</option>
+              <option value="10">10</option>
+              <option value="12">12</option>
+            </select>
+          </div>
+        </div>
+        <div class="filter-actions">
+          <button id="refreshStats" class="btn btn-primary">Refresh Stats</button>
+          <button id="clearStatsFilters" class="btn btn-ghost" type="button">Clear Filters</button>
+        </div>
+      </div>
+    </details>
 
-    <section class="panel controls filters-shell">
-      <div class="filters-head">
-        <h2>Filters</h2>
-        <div id="statsFilterSummary" class="filters-summary">No active filters</div>
-      </div>
-      <div id="statsFilterPills" class="filter-pills"></div>
-      <div class="row">
-        <label for="trackFilter">Track Filter</label>
-        <select id="trackFilter"></select>
-        <label for="surfaceFilter">Surface</label>
-        <select id="surfaceFilter">
-          <option value="all">All</option>
-          <option value="good">Good</option>
-          <option value="soft">Soft</option>
-        </select>
-        <label for="roiModeFilter">ROI Mode</label>
-        <select id="roiModeFilter">
-          <option value="all">All</option>
-          <option value="winning">Winning only</option>
-          <option value="losing">Losing only</option>
-        </select>
-      </div>
-      <div class="row">
-        <label for="minRunsFilter">Min Runs</label>
-        <input id="minRunsFilter" type="number" min="0" step="1" value="0" />
-        <label for="minBackNumberFilter">Min Back #</label>
-        <input id="minBackNumberFilter" type="number" min="1" step="1" value="" placeholder="any" />
-        <label for="maxBackNumberFilter">Max Back #</label>
-        <input id="maxBackNumberFilter" type="number" min="1" step="1" value="" placeholder="any" />
-      </div>
-      <div class="row">
-        <label for="minBarrierFilter">Min Barrier</label>
-        <input id="minBarrierFilter" type="number" min="1" step="1" value="" placeholder="any" />
-        <label for="maxBarrierFilter">Max Barrier</label>
-        <input id="maxBarrierFilter" type="number" min="1" step="1" value="" placeholder="any" />
-        <label for="minDistanceFilter">Min Distance</label>
-        <input id="minDistanceFilter" type="number" min="800" step="100" value="" placeholder="meters" />
-        <label for="maxDistanceFilter">Max Distance</label>
-        <input id="maxDistanceFilter" type="number" min="800" step="100" value="" placeholder="meters" />
-      </div>
-      <div class="row">
-        <label for="minRoiFilter">Min ROI %</label>
-        <input id="minRoiFilter" type="number" step="0.1" value="" placeholder="any" />
-        <label for="maxRoiFilter">Max ROI %</label>
-        <input id="maxRoiFilter" type="number" step="0.1" value="" placeholder="any" />
-      </div>
-      <div class="row">
-        <label for="nameSearchFilter">Name Search</label>
-        <input id="nameSearchFilter" type="text" placeholder="jockey or trainer..." />
-        <label for="topNFilter">Chart Rows</label>
-        <select id="topNFilter">
-          <option value="6">6</option>
-          <option value="8" selected>8</option>
-          <option value="10">10</option>
-          <option value="12">12</option>
-        </select>
-      </div>
-      <div class="row actions">
-        <button id="refreshStats">Refresh Stats</button>
-        <button id="clearStatsFilters" type="button">Clear Filters</button>
-      </div>
-    </section>
-
-    <section class="panel">
+    <section class="card">
       <h2>Win/Loss Snapshot</h2>
       <div id="statsSummaryCards" class="stats-summary-cards"></div>
     </section>
 
-    <section class="panel">
+    <section class="card">
       <h2>Profitability Graphs</h2>
       <div class="stats-charts-grid">
-        <div class="chart-card">
-          <h3>Track ROI %</h3>
-          <div id="trackRoiChart" class="bar-chart"></div>
-        </div>
-        <div class="chart-card">
-          <h3>Barrier ROI %</h3>
-          <div id="barrierRoiChart" class="bar-chart"></div>
-        </div>
+        <div class="chart-card"><h3>Track ROI %</h3><div id="trackRoiChart" class="bar-chart"></div></div>
+        <div class="chart-card"><h3>Barrier ROI %</h3><div id="barrierRoiChart" class="bar-chart"></div></div>
       </div>
       <div class="stats-charts-grid">
-        <div class="chart-card">
-          <h3>Top Winning Jockeys (ROI %)</h3>
-          <div id="jockeyWinChart" class="bar-chart"></div>
-        </div>
-        <div class="chart-card">
-          <h3>Top Losing Jockeys (ROI %)</h3>
-          <div id="jockeyLossChart" class="bar-chart"></div>
-        </div>
+        <div class="chart-card"><h3>Top Winning Jockeys (ROI %)</h3><div id="jockeyWinChart" class="bar-chart"></div></div>
+        <div class="chart-card"><h3>Top Losing Jockeys (ROI %)</h3><div id="jockeyLossChart" class="bar-chart"></div></div>
       </div>
       <div class="stats-charts-grid">
-        <div class="chart-card">
-          <h3>Top Winning Trainers (ROI %)</h3>
-          <div id="trainerWinChart" class="bar-chart"></div>
-        </div>
-        <div class="chart-card">
-          <h3>Top Losing Trainers (ROI %)</h3>
-          <div id="trainerLossChart" class="bar-chart"></div>
-        </div>
+        <div class="chart-card"><h3>Top Winning Trainers (ROI %)</h3><div id="trainerWinChart" class="bar-chart"></div></div>
+        <div class="chart-card"><h3>Top Losing Trainers (ROI %)</h3><div id="trainerLossChart" class="bar-chart"></div></div>
       </div>
     </section>
 
-    <section class="panel">
-      <h2>Track Information</h2>
-      <table id="trackSummaryTable">
-        <thead>
-          <tr>
-            <th>Track</th>
-            <th>Races</th>
-            <th>Runs</th>
-            <th>Wins</th>
-            <th>Strike %</th>
-            <th>Profit (u)</th>
-            <th>ROI %</th>
-            <th>Avg Starters</th>
-            <th>Avg Prize Pool</th>
-            <th>Good %</th>
-            <th>Soft %</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
+    <details class="filter-panel">
+      <summary>Track Information</summary>
+      <div style="padding:0 var(--sp-4) var(--sp-4); overflow-x:auto">
+        <table id="trackSummaryTable">
+          <thead><tr><th>Track</th><th>Races</th><th>Runs</th><th>Wins</th><th>Strike %</th><th>Profit (u)</th><th>ROI %</th><th>Avg Starters</th><th>Avg Prize Pool</th><th>Good %</th><th>Soft %</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </details>
 
-    <section class="panel">
-      <h2>Historical Barrier Bias</h2>
-      <table id="barrierBiasTable">
-        <thead>
-          <tr>
-            <th>Track</th>
-            <th>Barrier Bucket</th>
-            <th>Runs</th>
-            <th>Wins</th>
-            <th>Strike %</th>
-            <th>Profit (u)</th>
-            <th>ROI %</th>
-            <th>Avg Finish</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
+    <details class="filter-panel">
+      <summary>Historical Barrier Bias</summary>
+      <div style="padding:0 var(--sp-4) var(--sp-4); overflow-x:auto">
+        <table id="barrierBiasTable">
+          <thead><tr><th>Track</th><th>Barrier Bucket</th><th>Runs</th><th>Wins</th><th>Strike %</th><th>Profit (u)</th><th>ROI %</th><th>Avg Finish</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </details>
 
-    <section class="panel">
-      <h2>Jockey Information</h2>
-      <table id="jockeyTable">
-        <thead>
-          <tr>
-            <th>Jockey</th>
-            <th>Runs</th>
-            <th>Wins</th>
-            <th>Strike %</th>
-            <th>Top 3 %</th>
-            <th>Profit (u)</th>
-            <th>ROI %</th>
-            <th>Fav Runs</th>
-            <th>Fav SR %</th>
-            <th>Fav ROI %</th>
-            <th>Avg Finish</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
+    <details class="filter-panel">
+      <summary>Jockey Information</summary>
+      <div style="padding:0 var(--sp-4) var(--sp-4); overflow-x:auto">
+        <table id="jockeyTable">
+          <thead><tr><th>Jockey</th><th>Runs</th><th>Wins</th><th>Strike %</th><th>Top 3 %</th><th>Profit (u)</th><th>ROI %</th><th>Fav Runs</th><th>Fav SR %</th><th>Fav ROI %</th><th>Avg Finish</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </details>
 
-    <section class="panel">
-      <h2>Trainer Information</h2>
-      <table id="trainerTable">
-        <thead>
-          <tr>
-            <th>Trainer</th>
-            <th>Runs</th>
-            <th>Wins</th>
-            <th>Strike %</th>
-            <th>Top 3 %</th>
-            <th>Profit (u)</th>
-            <th>ROI %</th>
-            <th>Fav Runs</th>
-            <th>Fav SR %</th>
-            <th>Fav ROI %</th>
-            <th>Avg Finish</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
+    <details class="filter-panel">
+      <summary>Trainer Information</summary>
+      <div style="padding:0 var(--sp-4) var(--sp-4); overflow-x:auto">
+        <table id="trainerTable">
+          <thead><tr><th>Trainer</th><th>Runs</th><th>Wins</th><th>Strike %</th><th>Top 3 %</th><th>Profit (u)</th><th>ROI %</th><th>Fav Runs</th><th>Fav SR %</th><th>Fav ROI %</th><th>Avg Finish</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </details>
 
-    <section class="panel">
-      <h2>Leaderboards</h2>
-      <div class="stats-grid">
-        <div>
-          <h3>Top Jockeys</h3>
-          <table id="leaderJockeyTable">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Wins</th>
-                <th>Runs</th>
-                <th>Strike %</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div>
-          <h3>Top Trainers</h3>
-          <table id="leaderTrainerTable">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Wins</th>
-                <th>Runs</th>
-                <th>Strike %</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+    <details class="filter-panel">
+      <summary>Leaderboards</summary>
+      <div style="padding:0 var(--sp-4) var(--sp-4)">
+        <div class="stats-grid">
+          <div>
+            <h3>Top Jockeys</h3>
+            <table id="leaderJockeyTable">
+              <thead><tr><th>Name</th><th>Wins</th><th>Runs</th><th>Strike %</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div>
+            <h3>Top Trainers</h3>
+            <table id="leaderTrainerTable">
+              <thead><tr><th>Name</th><th>Wins</th><th>Runs</th><th>Strike %</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </section>
+    </details>
   </main>
-  <script src="/static/stats.js"></script>
+
+  <div id="toastContainer" class="toast-container"></div>
+  <script src="/static/stats.js?v=20260218a"></script>
 </body>
 </html>

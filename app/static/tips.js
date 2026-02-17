@@ -2,21 +2,37 @@ const raceDateInput = document.getElementById("raceDate");
 const minEdgeInput = document.getElementById("minEdge");
 const booksContainer = document.getElementById("books");
 const tipsBody = document.querySelector("#tipsTable tbody");
+const tipsTable = document.getElementById("tipsTable");
+const tipsLoading = document.getElementById("tipsLoading");
+const tipsEmpty = document.getElementById("tipsEmpty");
+const tipCountBadge = document.getElementById("tipCountBadge");
 const timeSortHeader = document.getElementById("timeSortHeader");
 const refreshTipsBtn = document.getElementById("refreshTips");
-const selectAllBooksBtn = document.getElementById("selectAllBooks");
-const clearAllBooksBtn = document.getElementById("clearAllBooks");
 const trackModal = document.getElementById("trackModal");
 const trackModalMeta = document.getElementById("trackModalMeta");
 const modalOddsInput = document.getElementById("modalOdds");
 const modalStakeInput = document.getElementById("modalStake");
 const modalSaveBtn = document.getElementById("modalSave");
 const modalCancelBtn = document.getElementById("modalCancel");
+const toastContainer = document.getElementById("toastContainer");
 
 let bookmakers = [];
+let bookSymbol = {};
 let selectedBooks = new Set();
 let timeSortAsc = true;
 let pendingTrackPayload = null;
+
+function showToast(message, type = "info") {
+  if (!toastContainer) return;
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+  setTimeout(() => {
+    toast.style.animation = "toast-out 300ms ease forwards";
+    toast.addEventListener("animationend", () => toast.remove());
+  }, 3000);
+}
 
 function applyThemeFromPreference() {
   const pref = (localStorage.getItem("horse_theme_pref") || "system").toLowerCase();
@@ -45,6 +61,24 @@ async function jsonFetch(url, options = {}) {
   return res.json();
 }
 
+function saveFilter(page, field, value) {
+  localStorage.setItem(`horse_filter_${page}_${field}`, value);
+}
+
+function loadFilter(page, field, fallback) {
+  return localStorage.getItem(`horse_filter_${page}_${field}`) ?? fallback;
+}
+
+function formatOdds(decimalOdds) {
+  const fmt = (localStorage.getItem("horse_odds_format") || "decimal").toLowerCase();
+  if (fmt === "american") {
+    if (decimalOdds >= 2.0) return `+${Math.round((decimalOdds - 1) * 100)}`;
+    if (decimalOdds > 1.0) return `-${Math.round(100 / (decimalOdds - 1))}`;
+    return "+0";
+  }
+  return `$${decimalOdds.toFixed(2)}`;
+}
+
 function openTrackModal(payload) {
   pendingTrackPayload = payload;
   trackModalMeta.textContent = `${payload.track} R${payload.race_number} - ${payload.horse_name}`;
@@ -63,11 +97,11 @@ async function saveTrackedBetFromModal() {
   const odds = Number(modalOddsInput.value || "0");
   const stake = Number(modalStakeInput.value || "0");
   if (odds <= 1) {
-    alert("Odds must be greater than 1.0");
+    showToast("Odds must be greater than 1.0", "error");
     return;
   }
   if (stake < 0) {
-    alert("Stake must be zero or greater");
+    showToast("Stake must be zero or greater", "error");
     return;
   }
 
@@ -84,11 +118,13 @@ async function saveTrackedBetFromModal() {
     }),
   });
   closeTrackModal();
+  showToast("Bet added to slip", "success");
 }
 
 async function loadBookmakers() {
   const data = await jsonFetch("/api/bookmakers");
   bookmakers = data.bookmakers.map((b) => b.id);
+  bookSymbol = Object.fromEntries(data.bookmakers.map((b) => [b.id, b.symbol]));
   selectedBooks = new Set(bookmakers);
   renderBookmakers();
 }
@@ -96,10 +132,8 @@ async function loadBookmakers() {
 function renderBookmakers() {
   booksContainer.innerHTML = "";
   bookmakers.forEach((book) => {
-    const wrap = document.createElement("label");
-    wrap.style.display = "flex";
-    wrap.style.gap = "6px";
-    wrap.style.alignItems = "center";
+    const label = document.createElement("label");
+    label.className = "book-toggle";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = selectedBooks.has(book);
@@ -107,13 +141,22 @@ function renderBookmakers() {
       if (checkbox.checked) selectedBooks.add(book);
       else selectedBooks.delete(book);
     });
-    wrap.appendChild(checkbox);
-    wrap.appendChild(document.createTextNode(book));
-    booksContainer.appendChild(wrap);
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(bookSymbol[book] || book));
+    booksContainer.appendChild(label);
   });
 }
 
+function setLoadingState(loading) {
+  if (tipsLoading) tipsLoading.hidden = !loading;
+  if (loading) {
+    tipsTable.style.display = "none";
+    if (tipsEmpty) tipsEmpty.hidden = true;
+  }
+}
+
 async function loadDailyTips() {
+  setLoadingState(true);
   const date = raceDateInput.value || todayIso();
   const minEdge = Number(minEdgeInput.value || "0");
   const books = encodeURIComponent(selectedBookString());
@@ -126,8 +169,27 @@ async function loadDailyTips() {
     return timeSortAsc ? cmp : -cmp;
   });
 
-  timeSortHeader.textContent = `Jump Time ${timeSortAsc ? "ASC" : "DESC"}`;
+  setLoadingState(false);
+
+  if (tipCountBadge) {
+    tipCountBadge.textContent = String(tips.length);
+    tipCountBadge.className = tips.length > 0 ? "badge badge-brand" : "badge badge-muted";
+  }
+
+  timeSortHeader.textContent = `Jump Time ${timeSortAsc ? "\u25B2" : "\u25BC"}`;
   tipsBody.innerHTML = "";
+
+  if (!tips.length) {
+    tipsTable.style.display = "none";
+    if (tipsEmpty) tipsEmpty.hidden = false;
+    return;
+  }
+
+  tipsTable.style.display = "";
+  if (tipsEmpty) tipsEmpty.hidden = true;
+
+  notifyHighEdgeTips(tips);
+
   tips.forEach((tip) => {
     const edgeCls = Number(tip.edge_pct) > 0
       ? "edge-positive"
@@ -159,7 +221,7 @@ async function loadDailyTips() {
       <td><span class="form-string">${formHtml}</span></td>
       <td>${tip.trainer}${tipGrade(tip.trainer_roi_pct)}</td>
       <td>${tip.jockey}${tipGrade(tip.jockey_roi_pct)}</td>
-      <td>$${Number(tip.market_odds).toFixed(2)}</td>
+      <td>${formatOdds(Number(tip.market_odds))}</td>
       <td>${tip.best_book_symbol}</td>
       <td class="${edgeCls}">${Number(tip.edge_pct).toFixed(2)}%</td>
       <td><a href="${tip.bet_url}" target="_blank" rel="noreferrer">Bet</a></td>
@@ -181,36 +243,82 @@ async function loadDailyTips() {
   });
 }
 
-selectAllBooksBtn.addEventListener("click", () => {
-  selectedBooks = new Set(bookmakers);
-  renderBookmakers();
+raceDateInput.addEventListener("change", () => saveFilter("tips", "date", raceDateInput.value));
+minEdgeInput.addEventListener("change", () => saveFilter("tips", "minEdge", minEdgeInput.value));
+
+refreshTipsBtn.addEventListener("click", () => {
+  loadDailyTips().catch((err) => {
+    console.error(err);
+    showToast(`Failed to load tips: ${err.message}`, "error");
+  });
 });
 
-clearAllBooksBtn.addEventListener("click", () => {
-  selectedBooks = new Set();
-  renderBookmakers();
-});
-
-refreshTipsBtn.addEventListener("click", loadDailyTips);
 timeSortHeader.addEventListener("click", async () => {
   timeSortAsc = !timeSortAsc;
   await loadDailyTips();
 });
 
-modalSaveBtn?.addEventListener("click", saveTrackedBetFromModal);
+modalSaveBtn?.addEventListener("click", () => {
+  saveTrackedBetFromModal().catch((err) => {
+    console.error(err);
+    showToast(`Failed to save bet: ${err.message}`, "error");
+  });
+});
 modalCancelBtn?.addEventListener("click", closeTrackModal);
 trackModal?.addEventListener("click", (e) => {
   if (e.target === trackModal) closeTrackModal();
 });
 
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea, select")) return;
+  if (e.key === "Escape") {
+    document.querySelectorAll(".modal:not(.hidden)").forEach((m) => m.classList.add("hidden"));
+    return;
+  }
+  if (e.key === "r" || e.key === "R") {
+    loadDailyTips().catch(console.error);
+    return;
+  }
+  if (e.key >= "1" && e.key <= "5") {
+    const pages = ["/", "/tips", "/my-bets", "/stats", "/settings"];
+    window.location.href = pages[Number(e.key) - 1];
+  }
+});
+
+function notifyHighEdgeTips(tips) {
+  if (!("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+  const enabled = localStorage.getItem("horse_notifications_enabled");
+  if (enabled === "0") return;
+  const minEdge = Number(localStorage.getItem("horse_notify_min_edge") || "5");
+  const hot = tips.filter((t) => Number(t.edge_pct) >= minEdge);
+  if (!hot.length) return;
+  const top5 = hot.slice(0, 5);
+  const body = top5.map((t) => `${t.track} R${t.race_number} ${t.horse_name} (${Number(t.edge_pct).toFixed(1)}%)`).join("\n");
+  new Notification("HorseEdge - High Edge Tips", { body, tag: "horseedge-tips" });
+}
+
+async function requestNotificationPermission() {
+  if (!("Notification" in window)) return;
+  const enabled = localStorage.getItem("horse_notifications_enabled");
+  if (enabled === "0") return;
+  if (Notification.permission === "default") {
+    await Notification.requestPermission();
+  }
+}
+
 async function init() {
   applyThemeFromPreference();
-  raceDateInput.value = todayIso();
+  await requestNotificationPermission();
+  const savedDate = loadFilter("tips", "date", "");
+  raceDateInput.value = savedDate || todayIso();
+  const savedMinEdge = loadFilter("tips", "minEdge", "");
+  if (savedMinEdge) minEdgeInput.value = savedMinEdge;
   await loadBookmakers();
   await loadDailyTips();
 }
 
 init().catch((err) => {
   console.error(err);
-  alert(`Failed to initialize daily tips page: ${err.message}`);
+  showToast(`Failed to initialize: ${err.message}`, "error");
 });

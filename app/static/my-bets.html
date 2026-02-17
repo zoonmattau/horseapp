@@ -3,27 +3,69 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>My Bets</title>
+  <title>My Bets - HorseEdge AU</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=20260216d" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260218a" />
 </head>
 <body>
-  <main class="page page-bets">
-    <header class="header">
-      <h1>HorseEdge AU</h1>
-      <p>Track all of your saved bets and outcomes.</p>
-    </header>
-    <nav class="top-toggle" aria-label="View toggle">
-      <a href="/" class="toggle-link">Race Board</a>
-      <a href="/tips" class="toggle-link">Daily Tips</a>
-      <a href="/my-bets" class="toggle-link active">My Bets</a>
-      <a href="/stats" class="toggle-link">Stats</a>
-      <a href="/settings" class="toggle-link">Settings</a>
-    </nav>
+  <nav class="topbar" aria-label="Main navigation">
+    <a href="/" class="topbar-brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      HorseEdge
+    </a>
+    <div class="topbar-links">
+      <a href="/" class="topbar-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Race Board
+      </a>
+      <a href="/tips" class="topbar-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg>
+        Daily Tips
+      </a>
+      <a href="/my-bets" class="topbar-link active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        My Bets
+      </a>
+      <a href="/stats" class="topbar-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Stats
+      </a>
+      <a href="/settings" class="topbar-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Settings
+      </a>
+    </div>
+  </nav>
 
-    <section class="panel filters-shell">
+  <nav class="bottom-tabs" aria-label="Mobile navigation">
+    <div class="bottom-tabs-inner">
+      <a href="/" class="bottom-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Board
+      </a>
+      <a href="/tips" class="bottom-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg>
+        Tips
+      </a>
+      <a href="/my-bets" class="bottom-tab active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        Bets
+      </a>
+      <a href="/stats" class="bottom-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Stats
+      </a>
+      <a href="/settings" class="bottom-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Settings
+      </a>
+    </div>
+  </nav>
+
+  <main class="page page-bets">
+    <section class="card">
       <div class="panel-head">
         <h2>Bet Log</h2>
         <div class="bets-log-actions">
@@ -35,62 +77,88 @@
             <option value="week">Last 7 Days</option>
             <option value="month">Last 30 Days</option>
           </select>
-          <button id="toggleAnalytics">Show Analytics</button>
+          <button id="settlePending" class="btn btn-secondary">Settle Pending</button>
+          <button id="toggleAnalytics" class="btn btn-secondary">Show Analytics</button>
         </div>
       </div>
-      <div class="filters-head">
-        <h2 class="filters-title">Filters</h2>
-        <div id="betsFilterSummary" class="filters-summary">No active filters</div>
-      </div>
-      <div id="betsFilterPills" class="filter-pills"></div>
-      <div class="row">
-        <label for="betsTrackFilter">Track</label>
-        <select id="betsTrackFilter">
-          <option value="all">All Tracks</option>
-        </select>
-        <label for="betsBookFilter">Book</label>
-        <select id="betsBookFilter">
-          <option value="all">All Books</option>
-        </select>
-        <label for="betsResultFilter">Result</label>
-        <select id="betsResultFilter">
-          <option value="all">All Results</option>
-          <option value="won">Won</option>
-          <option value="lost">Lost</option>
-          <option value="pending">Pending</option>
-          <option value="settled">Settled</option>
-        </select>
-      </div>
-      <div class="row">
-        <label for="betsMinEdgeFilter">Min Edge %</label>
-        <input id="betsMinEdgeFilter" type="number" step="0.1" placeholder="any" />
-        <label for="betsMinOddsFilter">Min Odds</label>
-        <input id="betsMinOddsFilter" type="number" step="0.01" min="1.01" placeholder="any" />
-        <label for="betsMaxOddsFilter">Max Odds</label>
-        <input id="betsMaxOddsFilter" type="number" step="0.01" min="1.01" placeholder="any" />
-      </div>
-      <div class="row">
-        <label for="betsMinBackNumberFilter">Min Back #</label>
-        <input id="betsMinBackNumberFilter" type="number" min="1" step="1" placeholder="any" />
-        <label for="betsMaxBackNumberFilter">Max Back #</label>
-        <input id="betsMaxBackNumberFilter" type="number" min="1" step="1" placeholder="any" />
-        <label for="betsMinBarrierFilter">Min Barrier</label>
-        <input id="betsMinBarrierFilter" type="number" min="1" step="1" placeholder="any" />
-        <label for="betsMaxBarrierFilter">Max Barrier</label>
-        <input id="betsMaxBarrierFilter" type="number" min="1" step="1" placeholder="any" />
-      </div>
-      <div class="row">
-        <label for="betsMinDistanceFilter">Min Distance</label>
-        <input id="betsMinDistanceFilter" type="number" min="800" step="100" placeholder="meters" />
-        <label for="betsMaxDistanceFilter">Max Distance</label>
-        <input id="betsMaxDistanceFilter" type="number" min="800" step="100" placeholder="meters" />
-      </div>
-      <div class="row actions">
-        <label for="betsSearchFilter">Search</label>
-        <input id="betsSearchFilter" type="text" placeholder="horse / track / bookmaker" />
-        <button id="clearBetsFilters" type="button">Clear Filters</button>
-      </div>
+
+      <details class="filter-panel" id="betsFilterPanel">
+        <summary>Filters <span id="betsFilterSummary" class="filters-summary" style="margin-left:auto">No active filters</span></summary>
+        <div class="filter-panel-body">
+          <div id="betsFilterPills" class="filter-pills"></div>
+          <div class="filter-grid">
+            <div class="filter-field">
+              <label for="betsTrackFilter">Track</label>
+              <select id="betsTrackFilter"><option value="all">All Tracks</option></select>
+            </div>
+            <div class="filter-field">
+              <label for="betsBookFilter">Book</label>
+              <select id="betsBookFilter"><option value="all">All Books</option></select>
+            </div>
+            <div class="filter-field">
+              <label for="betsResultFilter">Result</label>
+              <select id="betsResultFilter">
+                <option value="all">All Results</option>
+                <option value="won">Won</option>
+                <option value="lost">Lost</option>
+                <option value="pending">Pending</option>
+                <option value="settled">Settled</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label for="betsMinEdgeFilter">Min Edge %</label>
+              <input id="betsMinEdgeFilter" type="number" step="0.1" placeholder="any" />
+            </div>
+            <div class="filter-field">
+              <label for="betsMinOddsFilter">Min Odds</label>
+              <input id="betsMinOddsFilter" type="number" step="0.01" min="1.01" placeholder="any" />
+            </div>
+            <div class="filter-field">
+              <label for="betsMaxOddsFilter">Max Odds</label>
+              <input id="betsMaxOddsFilter" type="number" step="0.01" min="1.01" placeholder="any" />
+            </div>
+            <div class="filter-field">
+              <label for="betsMinBackNumberFilter">Min Back #</label>
+              <input id="betsMinBackNumberFilter" type="number" min="1" step="1" placeholder="any" />
+            </div>
+            <div class="filter-field">
+              <label for="betsMaxBackNumberFilter">Max Back #</label>
+              <input id="betsMaxBackNumberFilter" type="number" min="1" step="1" placeholder="any" />
+            </div>
+            <div class="filter-field">
+              <label for="betsMinBarrierFilter">Min Barrier</label>
+              <input id="betsMinBarrierFilter" type="number" min="1" step="1" placeholder="any" />
+            </div>
+            <div class="filter-field">
+              <label for="betsMaxBarrierFilter">Max Barrier</label>
+              <input id="betsMaxBarrierFilter" type="number" min="1" step="1" placeholder="any" />
+            </div>
+            <div class="filter-field">
+              <label for="betsMinDistanceFilter">Min Distance</label>
+              <input id="betsMinDistanceFilter" type="number" min="800" step="100" placeholder="meters" />
+            </div>
+            <div class="filter-field">
+              <label for="betsMaxDistanceFilter">Max Distance</label>
+              <input id="betsMaxDistanceFilter" type="number" min="800" step="100" placeholder="meters" />
+            </div>
+            <div class="filter-field" style="grid-column: span 2">
+              <label for="betsSearchFilter">Search</label>
+              <input id="betsSearchFilter" type="text" placeholder="horse / track / bookmaker" />
+            </div>
+          </div>
+          <div class="filter-actions">
+            <button id="clearBetsFilters" class="btn btn-ghost" type="button">Clear Filters</button>
+          </div>
+        </div>
+      </details>
+
       <div id="betsTotals" class="bets-totals"></div>
+
+      <div id="betsLoading" class="skeleton-table" hidden>
+        <div class="skeleton skeleton-row"></div>
+        <div class="skeleton skeleton-row"></div>
+        <div class="skeleton skeleton-row"></div>
+      </div>
       <table id="betsTable">
         <thead>
           <tr>
@@ -111,51 +179,38 @@
       </table>
     </section>
 
-    <section id="analyticsPanel" class="panel" hidden>
+    <section id="analyticsPanel" class="card" hidden>
       <h2>Bet Analytics</h2>
+      <div class="tabs" id="analyticsTabs">
+        <button class="tab-btn active" data-tab="market">Market</button>
+        <button class="tab-btn" data-tab="filtered">Filtered</button>
+        <button class="tab-btn" data-tab="charts">Charts</button>
+      </div>
 
-      <details open>
-        <summary>Market Metrics (Auto-Settled)</summary>
-        <div id="marketAnalyticsMeta" class="muted"></div>
+      <div id="tab-market" class="tab-content active">
+        <div id="marketAnalyticsMeta" class="muted" style="margin-bottom:var(--sp-3)"></div>
         <div id="marketKpiGrid" class="market-kpi-grid"></div>
-      </details>
-
-      <details open>
-        <summary>Market Profit by Bookmaker</summary>
+        <h3 style="margin-top:var(--sp-4)">Profit by Bookmaker</h3>
         <div id="marketBookmakerGraph" class="graph-list"></div>
-      </details>
-
-      <details open>
-        <summary>Market Profit by Track</summary>
+        <h3 style="margin-top:var(--sp-4)">Profit by Track</h3>
         <div id="marketTrackGraph" class="graph-list"></div>
-      </details>
+      </div>
 
-      <details open>
-        <summary>Filtered Core Metrics</summary>
-        <table id="metricsTable">
-          <tbody></tbody>
-        </table>
-      </details>
-
-      <details open>
-        <summary>Filtered Profit by Bookmaker</summary>
+      <div id="tab-filtered" class="tab-content">
+        <h3>Core Metrics</h3>
+        <table id="metricsTable"><tbody></tbody></table>
+        <h3 style="margin-top:var(--sp-4)">Profit by Bookmaker</h3>
         <div id="bookmakerGraph" class="graph-list"></div>
-      </details>
-
-      <details>
-        <summary>Filtered Profit by Track</summary>
+        <h3 style="margin-top:var(--sp-4)">Profit by Track</h3>
         <div id="trackGraph" class="graph-list"></div>
-      </details>
+      </div>
 
-      <details>
-        <summary>Edge Bucket Distribution</summary>
+      <div id="tab-charts" class="tab-content">
+        <h3>Edge Bucket Distribution</h3>
         <div id="edgeGraph" class="graph-list"></div>
-      </details>
-
-      <details>
-        <summary>Recent 30 Bet Outcomes</summary>
+        <h3 style="margin-top:var(--sp-4)">Recent 30 Bet Outcomes</h3>
         <div id="recentGraph" class="graph-list"></div>
-      </details>
+      </div>
     </section>
   </main>
 
@@ -163,20 +218,22 @@
     <div class="modal-card">
       <h3 id="editBetModalTitle">Edit Bet</h3>
       <div id="editBetModalMeta" class="modal-meta"></div>
-      <div class="row">
+      <div class="modal-field">
         <label for="editBetOdds">Odds</label>
         <input id="editBetOdds" type="number" step="0.01" min="1.01" />
       </div>
-      <div class="row">
+      <div class="modal-field">
         <label for="editBetStake">Stake (units)</label>
         <input id="editBetStake" type="number" step="0.01" min="0" />
       </div>
-      <div class="row actions">
-        <button id="editBetSave">Save</button>
-        <button id="editBetCancel" type="button">Cancel</button>
+      <div class="modal-actions">
+        <button id="editBetCancel" class="btn btn-secondary" type="button">Cancel</button>
+        <button id="editBetSave" class="btn btn-primary">Save</button>
       </div>
     </div>
   </div>
-  <script src="/static/my-bets.js?v=20260216d"></script>
+
+  <div id="toastContainer" class="toast-container"></div>
+  <script src="/static/my-bets.js?v=20260218a"></script>
 </body>
 </html>

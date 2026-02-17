@@ -1157,6 +1157,19 @@ def get_race_board(
         jockey_roi = {}
         trainer_roi = {}
 
+    # Fetch race results if they exist
+    result_rows = conn.execute(
+        """
+        SELECT rr.runner_id, rr.finish_pos, r.horse_name
+        FROM race_results rr
+        JOIN runners r ON r.id = rr.runner_id
+        WHERE rr.race_id = ?
+        ORDER BY rr.finish_pos
+        """,
+        (race_id,),
+    ).fetchall()
+    results = [dict(rr) for rr in result_rows]
+
     conn.close()
 
     for rid, item in by_runner.items():
@@ -1164,6 +1177,11 @@ def get_race_board(
         item["form_last5"] = "".join(str(p) if p < 10 else "x" for p in reversed(positions))
         item["jockey_roi_pct"] = jockey_roi.get(item["jockey"], 0.0)
         item["trainer_roi_pct"] = trainer_roi.get(item["trainer"], 0.0)
+        # Attach finish position if results exist
+        for rr in results:
+            if rr["runner_id"] == rid:
+                item["finish_pos"] = rr["finish_pos"]
+                break
 
     board = list(by_runner.values())
     for item in board:
@@ -1173,7 +1191,7 @@ def get_race_board(
         "model_pct_total": round(sum(x["model_prob_pct"] for x in board), 2),
         "bookmaker_pct_total": round(sum(x["bookmaker_pct"] for x in board), 2),
     }
-    return {"race": dict(race), "min_edge": min_edge, "selected_books": selected_books, "rows": board, "totals": totals}
+    return {"race": dict(race), "min_edge": min_edge, "selected_books": selected_books, "rows": board, "totals": totals, "results": results}
 
 
 @app.get("/api/race-signals")
@@ -1792,6 +1810,95 @@ def export_user_settings():
         "profile": dict(profile) if profile else None,
         "settings": dict(settings) if settings else None,
     }
+
+
+class ImportSettingsRequest(BaseModel):
+    profile: Optional[dict] = None
+    settings: Optional[dict] = None
+
+
+@app.post("/api/user/settings/import")
+def import_user_settings(payload: ImportSettingsRequest):
+    conn = get_conn()
+    now = datetime.utcnow().isoformat()
+
+    if payload.profile:
+        display_name = str(payload.profile.get("display_name", "")).strip()
+        email = str(payload.profile.get("email", "")).strip()
+        if display_name and email and "@" in email:
+            conn.execute(
+                """
+                INSERT INTO user_profiles (user_id, display_name, email, plan, created_at, updated_at)
+                VALUES ('demo', ?, ?, 'free', ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                  display_name = excluded.display_name,
+                  email = excluded.email,
+                  updated_at = excluded.updated_at
+                """,
+                (display_name, email, now, now),
+            )
+
+    if payload.settings:
+        existing = conn.execute(
+            "SELECT * FROM user_settings WHERE user_id = 'demo'"
+        ).fetchone()
+        merged = dict(DEFAULT_USER_SETTINGS)
+        if existing:
+            merged.update(dict(existing))
+
+        valid_keys = set(DEFAULT_USER_SETTINGS.keys())
+        for key, value in payload.settings.items():
+            if key in valid_keys and value is not None:
+                merged[key] = value
+
+        # Validate
+        if merged.get("theme") not in {"system", "light", "dark"}:
+            merged["theme"] = DEFAULT_USER_SETTINGS["theme"]
+        if merged.get("odds_format") not in {"decimal", "american"}:
+            merged["odds_format"] = DEFAULT_USER_SETTINGS["odds_format"]
+        if merged.get("notifications_enabled") not in {0, 1}:
+            merged["notifications_enabled"] = DEFAULT_USER_SETTINGS["notifications_enabled"]
+        if merged.get("auto_settle_enabled") not in {0, 1}:
+            merged["auto_settle_enabled"] = DEFAULT_USER_SETTINGS["auto_settle_enabled"]
+
+        conn.execute(
+            """
+            INSERT INTO user_settings (
+                user_id, timezone, default_min_edge, notifications_enabled, notify_min_edge,
+                theme, odds_format, default_stake, bankroll_units, auto_settle_enabled, analytics_top_n, updated_at
+            )
+            VALUES ('demo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+              timezone = excluded.timezone,
+              default_min_edge = excluded.default_min_edge,
+              notifications_enabled = excluded.notifications_enabled,
+              notify_min_edge = excluded.notify_min_edge,
+              theme = excluded.theme,
+              odds_format = excluded.odds_format,
+              default_stake = excluded.default_stake,
+              bankroll_units = excluded.bankroll_units,
+              auto_settle_enabled = excluded.auto_settle_enabled,
+              analytics_top_n = excluded.analytics_top_n,
+              updated_at = excluded.updated_at
+            """,
+            (
+                merged["timezone"],
+                float(merged["default_min_edge"]),
+                int(merged["notifications_enabled"]),
+                float(merged["notify_min_edge"]),
+                merged["theme"],
+                merged["odds_format"],
+                float(merged["default_stake"]),
+                float(merged["bankroll_units"]),
+                int(merged["auto_settle_enabled"]),
+                int(merged["analytics_top_n"]),
+                now,
+            ),
+        )
+
+    conn.commit()
+    conn.close()
+    return {"status": "ok"}
 
 
 @app.get("/api/user/bets")

@@ -1,4 +1,6 @@
 const betsBody = document.querySelector("#betsTable tbody");
+const betsTable = document.getElementById("betsTable");
+const betsLoading = document.getElementById("betsLoading");
 const analyticsPanel = document.getElementById("analyticsPanel");
 const toggleAnalyticsBtn = document.getElementById("toggleAnalytics");
 const rangeFilter = document.getElementById("rangeFilter");
@@ -34,12 +36,27 @@ const editBetOdds = document.getElementById("editBetOdds");
 const editBetStake = document.getElementById("editBetStake");
 const editBetSave = document.getElementById("editBetSave");
 const editBetCancel = document.getElementById("editBetCancel");
+const toastContainer = document.getElementById("toastContainer");
+const analyticsTabs = document.getElementById("analyticsTabs");
 
 let currentBets = [];
 let currentFilteredBets = [];
 let marketAnalytics = null;
 let pendingEditBet = null;
+const settlePendingBtn = document.getElementById("settlePending");
 let betsFilterTimer = null;
+
+function showToast(message, type = "info") {
+  if (!toastContainer) return;
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+  setTimeout(() => {
+    toast.style.animation = "toast-out 300ms ease forwards";
+    toast.addEventListener("animationend", () => toast.remove());
+  }, 3000);
+}
 
 function applyThemeFromPreference() {
   const pref = (localStorage.getItem("horse_theme_pref") || "system").toLowerCase();
@@ -57,6 +74,24 @@ async function jsonFetch(url, options = {}) {
   return res.json();
 }
 
+function saveFilter(page, field, value) {
+  localStorage.setItem(`horse_filter_${page}_${field}`, value);
+}
+
+function loadFilter(page, field, fallback) {
+  return localStorage.getItem(`horse_filter_${page}_${field}`) ?? fallback;
+}
+
+function formatOdds(decimalOdds) {
+  const fmt = (localStorage.getItem("horse_odds_format") || "decimal").toLowerCase();
+  if (fmt === "american") {
+    if (decimalOdds >= 2.0) return `+${Math.round((decimalOdds - 1) * 100)}`;
+    if (decimalOdds > 1.0) return `-${Math.round(100 / (decimalOdds - 1))}`;
+    return "+0";
+  }
+  return `$${decimalOdds.toFixed(2)}`;
+}
+
 function edgeClass(value) {
   if (value > 0) return "edge-positive";
   if (value < 0) return "edge-negative";
@@ -66,6 +101,20 @@ function edgeClass(value) {
 function debounceApplyFilters() {
   clearTimeout(betsFilterTimer);
   betsFilterTimer = setTimeout(() => applyFiltersAndRender(), 180);
+}
+
+/* --- Tab switching --- */
+if (analyticsTabs) {
+  analyticsTabs.addEventListener("click", (e) => {
+    const btn = e.target.closest(".tab-btn");
+    if (!btn) return;
+    const tab = btn.dataset.tab;
+    analyticsTabs.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll("#analyticsPanel .tab-content").forEach((tc) => {
+      tc.classList.toggle("active", tc.id === `tab-${tab}`);
+    });
+  });
 }
 
 function renderBetsFilterMeta() {
@@ -162,10 +211,8 @@ function filterBetsAdvanced(bets) {
   return bets.filter((b) => {
     if (track !== "all" && String(b.track || "").toLowerCase() !== track) return false;
     if (book !== "all" && String(b.bookmaker || "").toLowerCase() !== book) return false;
-
     if (result === "settled" && (b.result !== "won" && b.result !== "lost")) return false;
     if (result !== "all" && result !== "settled" && b.result !== result) return false;
-
     const edge = Number(b.edge_pct || 0);
     const odds = Number(b.odds_at_tip || 0);
     const backNumber = Number(b.back_number || 0);
@@ -180,7 +227,6 @@ function filterBetsAdvanced(bets) {
     if (maxBarrier !== null && barrier > maxBarrier) return false;
     if (minDistance !== null && distance < minDistance) return false;
     if (maxDistance !== null && distance > maxDistance) return false;
-
     if (q) {
       const hay = `${b.horse_name || ""} ${b.track || ""} ${b.bookmaker || ""}`.toLowerCase();
       if (!hay.includes(q)) return false;
@@ -191,10 +237,8 @@ function filterBetsAdvanced(bets) {
 
 function populateBetFilterSelects(bets) {
   if (!betsTrackFilter || !betsBookFilter) return;
-
   const uniqueTracks = Array.from(new Set(bets.map((b) => String(b.track || "").trim()).filter(Boolean))).sort();
   const uniqueBooks = Array.from(new Set(bets.map((b) => String(b.bookmaker || "").trim()).filter(Boolean))).sort();
-
   const selectedTrack = betsTrackFilter.value || "all";
   const selectedBook = betsBookFilter.value || "all";
 
@@ -323,7 +367,6 @@ function renderBarGraph(container, rows, valueLabel) {
     container.textContent = "No data.";
     return;
   }
-
   const maxAbs = Math.max(...rows.map((r) => Math.abs(r.value)), 1);
   for (const row of rows) {
     const item = document.createElement("div");
@@ -464,6 +507,7 @@ async function setResult(betId, result) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ result }),
   });
+  showToast(`Bet marked as ${result}`, "success");
   await loadBets();
 }
 
@@ -471,16 +515,15 @@ async function updateBetDetails(betId, oddsAtTip, stake) {
   await jsonFetch(`/api/tips/tracked/${betId}/update`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      odds_at_tip: oddsAtTip,
-      stake,
-    }),
+    body: JSON.stringify({ odds_at_tip: oddsAtTip, stake }),
   });
+  showToast("Bet updated", "success");
   await loadBets();
 }
 
 async function deleteBet(betId) {
   await jsonFetch(`/api/tips/tracked/${betId}`, { method: "DELETE" });
+  showToast("Bet deleted", "success");
   await loadBets();
 }
 
@@ -504,11 +547,11 @@ async function saveEditModal() {
   const odds = Number(editBetOdds?.value || "0");
   const stake = Number(editBetStake?.value || "0");
   if (odds <= 1) {
-    alert("Odds must be greater than 1.0");
+    showToast("Odds must be greater than 1.0", "error");
     return;
   }
   if (stake < 0) {
-    alert("Stake must be non-negative");
+    showToast("Stake must be non-negative", "error");
     return;
   }
   await updateBetDetails(pendingEditBet.id, odds, stake);
@@ -540,7 +583,7 @@ function renderLog(bets) {
       <td>R${b.race_number}</td>
       <td>${b.horse_name}</td>
       <td>${b.bookmaker}</td>
-      <td>$${Number(b.odds_at_tip).toFixed(2)}</td>
+      <td>${formatOdds(Number(b.odds_at_tip))}</td>
       <td>${stake.toFixed(2)}u</td>
       <td class="${edgeClass(Number(b.edge_pct))}">${Number(b.edge_pct).toFixed(2)}%</td>
       <td class="${b.result === "pending" ? "edge-neutral" : edgeClass(pl)}">${b.result === "pending" ? "-" : formatProfitLoss(pl)}</td>
@@ -588,6 +631,7 @@ function applyFiltersAndRender() {
 }
 
 async function loadBets() {
+  if (betsLoading) betsLoading.hidden = false;
   const betsData = await jsonFetch("/api/user/bets");
   let analyticsData = null;
   try {
@@ -602,8 +646,15 @@ async function loadBets() {
     };
   }
   currentBets = betsData.bets || [];
+  if (betsLoading) betsLoading.hidden = true;
   renderMarketAnalytics(analyticsData);
   populateBetFilterSelects(currentBets);
+  restoreBetsFilters();
+  // Restore track/book after selects are populated
+  const savedTrack = loadFilter("bets", "track", "all");
+  const savedBook = loadFilter("bets", "book", "all");
+  if (betsTrackFilter && [...betsTrackFilter.options].some((o) => o.value === savedTrack)) betsTrackFilter.value = savedTrack;
+  if (betsBookFilter && [...betsBookFilter.options].some((o) => o.value === savedBook)) betsBookFilter.value = savedBook;
   applyFiltersAndRender();
 }
 
@@ -622,8 +673,21 @@ function clearBetsFilters() {
   if (betsMinDistanceFilter) betsMinDistanceFilter.value = "";
   if (betsMaxDistanceFilter) betsMaxDistanceFilter.value = "";
   if (betsSearchFilter) betsSearchFilter.value = "";
+  saveBetsFilters();
   applyFiltersAndRender();
 }
+
+settlePendingBtn?.addEventListener("click", async () => {
+  try {
+    const data = await jsonFetch("/api/user/bets/settle-pending", { method: "POST" });
+    const s = data.settlement || {};
+    showToast(`Settled ${s.settled || 0} bets: ${s.won || 0} won, ${s.lost || 0} lost`, "success");
+    await loadBets();
+  } catch (err) {
+    console.error(err);
+    showToast(`Settlement failed: ${err.message}`, "error");
+  }
+});
 
 toggleAnalyticsBtn.addEventListener("click", () => {
   const hidden = analyticsPanel.hasAttribute("hidden");
@@ -636,8 +700,40 @@ toggleAnalyticsBtn.addEventListener("click", () => {
   }
 });
 
-rangeFilter?.addEventListener("change", applyFiltersAndRender);
-[betsTrackFilter, betsBookFilter, betsResultFilter].forEach((el) => el?.addEventListener("change", applyFiltersAndRender));
+function saveBetsFilters() {
+  saveFilter("bets", "range", rangeFilter?.value || "all");
+  saveFilter("bets", "track", betsTrackFilter?.value || "all");
+  saveFilter("bets", "book", betsBookFilter?.value || "all");
+  saveFilter("bets", "result", betsResultFilter?.value || "all");
+  saveFilter("bets", "minEdge", betsMinEdgeFilter?.value || "");
+  saveFilter("bets", "minOdds", betsMinOddsFilter?.value || "");
+  saveFilter("bets", "maxOdds", betsMaxOddsFilter?.value || "");
+  saveFilter("bets", "minBack", betsMinBackNumberFilter?.value || "");
+  saveFilter("bets", "maxBack", betsMaxBackNumberFilter?.value || "");
+  saveFilter("bets", "minBarrier", betsMinBarrierFilter?.value || "");
+  saveFilter("bets", "maxBarrier", betsMaxBarrierFilter?.value || "");
+  saveFilter("bets", "minDist", betsMinDistanceFilter?.value || "");
+  saveFilter("bets", "maxDist", betsMaxDistanceFilter?.value || "");
+  saveFilter("bets", "search", betsSearchFilter?.value || "");
+}
+
+function restoreBetsFilters() {
+  if (rangeFilter) rangeFilter.value = loadFilter("bets", "range", "all");
+  if (betsResultFilter) betsResultFilter.value = loadFilter("bets", "result", "all");
+  if (betsMinEdgeFilter) betsMinEdgeFilter.value = loadFilter("bets", "minEdge", "");
+  if (betsMinOddsFilter) betsMinOddsFilter.value = loadFilter("bets", "minOdds", "");
+  if (betsMaxOddsFilter) betsMaxOddsFilter.value = loadFilter("bets", "maxOdds", "");
+  if (betsMinBackNumberFilter) betsMinBackNumberFilter.value = loadFilter("bets", "minBack", "");
+  if (betsMaxBackNumberFilter) betsMaxBackNumberFilter.value = loadFilter("bets", "maxBack", "");
+  if (betsMinBarrierFilter) betsMinBarrierFilter.value = loadFilter("bets", "minBarrier", "");
+  if (betsMaxBarrierFilter) betsMaxBarrierFilter.value = loadFilter("bets", "maxBarrier", "");
+  if (betsMinDistanceFilter) betsMinDistanceFilter.value = loadFilter("bets", "minDist", "");
+  if (betsMaxDistanceFilter) betsMaxDistanceFilter.value = loadFilter("bets", "maxDist", "");
+  if (betsSearchFilter) betsSearchFilter.value = loadFilter("bets", "search", "");
+}
+
+rangeFilter?.addEventListener("change", () => { saveBetsFilters(); applyFiltersAndRender(); });
+[betsTrackFilter, betsBookFilter, betsResultFilter].forEach((el) => el?.addEventListener("change", () => { saveBetsFilters(); applyFiltersAndRender(); }));
 [
   betsMinEdgeFilter,
   betsMinOddsFilter,
@@ -649,7 +745,7 @@ rangeFilter?.addEventListener("change", applyFiltersAndRender);
   betsMinDistanceFilter,
   betsMaxDistanceFilter,
   betsSearchFilter,
-].forEach((el) => el?.addEventListener("input", debounceApplyFilters));
+].forEach((el) => el?.addEventListener("input", () => { saveBetsFilters(); debounceApplyFilters(); }));
 clearBetsFiltersBtn?.addEventListener("click", clearBetsFilters);
 editBetSave?.addEventListener("click", saveEditModal);
 editBetCancel?.addEventListener("click", closeEditModal);
@@ -657,9 +753,25 @@ editBetModal?.addEventListener("click", (e) => {
   if (e.target === editBetModal) closeEditModal();
 });
 
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea, select")) return;
+  if (e.key === "Escape") {
+    document.querySelectorAll(".modal:not(.hidden)").forEach((m) => m.classList.add("hidden"));
+    return;
+  }
+  if (e.key === "r" || e.key === "R") {
+    loadBets().catch(console.error);
+    return;
+  }
+  if (e.key >= "1" && e.key <= "5") {
+    const pages = ["/", "/tips", "/my-bets", "/stats", "/settings"];
+    window.location.href = pages[Number(e.key) - 1];
+  }
+});
+
 applyThemeFromPreference();
 
 loadBets().catch((err) => {
   console.error(err);
-  alert(`Failed to load bets: ${err.message}`);
+  showToast(`Failed to load bets: ${err.message}`, "error");
 });

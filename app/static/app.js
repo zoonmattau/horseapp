@@ -1,7 +1,8 @@
 const raceDateInput = document.getElementById("raceDate");
 const booksContainer = document.getElementById("books");
 const tipsBody = document.querySelector("#tipsTable tbody");
-const trackedBody = document.querySelector("#trackedTable tbody");
+const tipsTable = document.getElementById("tipsTable");
+const boardLoading = document.getElementById("boardLoading");
 const matrixWrap = document.getElementById("matrixWrap");
 const selectedRaceTitle = document.getElementById("selectedRaceTitle");
 const raceMetaName = document.getElementById("raceMetaName");
@@ -27,14 +28,16 @@ const modalSaveBtn = document.getElementById("modalSave");
 const modalCancelBtn = document.getElementById("modalCancel");
 const refreshTipsBtn = document.getElementById("refreshTips");
 const simulateMoveBtn = document.getElementById("simulateMove");
-const selectAllBooksBtn = document.getElementById("selectAllBooks");
-const clearAllBooksBtn = document.getElementById("clearAllBooks");
+const simulateResultBtn = document.getElementById("simulateResult");
+const raceResultsEl = document.getElementById("raceResults");
 const valueFilterBtn = document.getElementById("valueFilterBtn");
 const mobileSlipBtn = document.getElementById("mobileSlipBtn");
 const detailFiltersWrap = document.getElementById("detailFilters");
 const filterDistanceEl = document.getElementById("filterDistance");
 const filterTrackEl = document.getElementById("filterTrack");
 const filterRunsBackEl = document.getElementById("filterRunsBack");
+const boardContextEl = document.getElementById("boardContext");
+const toastContainer = document.getElementById("toastContainer");
 
 let bookmakers = [];
 let bookSymbol = {};
@@ -52,6 +55,18 @@ let valueFilterActive = false;
 let lastBoardData = null;
 let boardSortKey = "edge_pct";
 let boardSortAsc = false;
+
+function showToast(message, type = "info") {
+  if (!toastContainer) return;
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+  setTimeout(() => {
+    toast.style.animation = "toast-out 300ms ease forwards";
+    toast.addEventListener("animationend", () => toast.remove());
+  }, 3000);
+}
 
 function syncThemeMode() {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -155,13 +170,36 @@ function renderSelectedRaceTitle() {
   if (!selectedRaceTitle) return;
   if (!selectedRaceHeaderMeta) {
     selectedRaceTitle.textContent = "Race Details";
+    if (boardContextEl) boardContextEl.textContent = "";
     return;
   }
   const c = countdownFromIso(selectedRaceJumpIso);
   const jumpPhrase = c === "jumped" ? "Jumped" : `${c} to jump`;
-  selectedRaceTitle.textContent =
+  const title =
     `${selectedRaceHeaderMeta.track} R${selectedRaceHeaderMeta.race_number} ` +
     `(${selectedRaceHeaderMeta.distance_m}m) \u2022 ${selectedRaceHeaderMeta.track_rating} \u2022 ${jumpPhrase}`;
+  selectedRaceTitle.textContent = title;
+  if (boardContextEl) {
+    boardContextEl.textContent = `${selectedRaceHeaderMeta.track} R${selectedRaceHeaderMeta.race_number} \u2022 ${jumpPhrase}`;
+  }
+}
+
+function saveFilter(page, field, value) {
+  localStorage.setItem(`horse_filter_${page}_${field}`, value);
+}
+
+function loadFilter(page, field, fallback) {
+  return localStorage.getItem(`horse_filter_${page}_${field}`) ?? fallback;
+}
+
+function formatOdds(decimalOdds) {
+  const fmt = (localStorage.getItem("horse_odds_format") || "decimal").toLowerCase();
+  if (fmt === "american") {
+    if (decimalOdds >= 2.0) return `+${Math.round((decimalOdds - 1) * 100)}`;
+    if (decimalOdds > 1.0) return `-${Math.round(100 / (decimalOdds - 1))}`;
+    return "+0";
+  }
+  return `$${decimalOdds.toFixed(2)}`;
 }
 
 function edgeClass(value) {
@@ -221,11 +259,11 @@ async function saveTrackedBetFromModal() {
   const odds = Number(modalOddsInput?.value || "0");
   const stake = Number(modalStakeInput?.value || "0");
   if (odds <= 1) {
-    alert("Odds must be greater than 1.0");
+    showToast("Odds must be greater than 1.0", "error");
     return;
   }
   if (stake < 0) {
-    alert("Stake must be zero or greater");
+    showToast("Stake must be zero or greater", "error");
     return;
   }
   if (pendingTrackPayload.mode === "edit") {
@@ -234,6 +272,7 @@ async function saveTrackedBetFromModal() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ odds_at_tip: odds, stake: stake }),
     });
+    showToast("Bet updated", "success");
   } else {
     await jsonFetch("/api/tips/track", {
       method: "POST",
@@ -247,6 +286,7 @@ async function saveTrackedBetFromModal() {
         stake: stake,
       }),
     });
+    showToast("Bet added to slip", "success");
   }
   closeTrackModal();
   await loadTracked();
@@ -263,11 +303,8 @@ async function loadBookmakers() {
 function renderBookmakers() {
   booksContainer.innerHTML = "";
   bookmakers.forEach((book) => {
-    const wrap = document.createElement("label");
-    wrap.style.display = "flex";
-    wrap.style.gap = "6px";
-    wrap.style.alignItems = "center";
-
+    const label = document.createElement("label");
+    label.className = "book-toggle";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = selectedBooks.has(book);
@@ -275,10 +312,9 @@ function renderBookmakers() {
       if (checkbox.checked) selectedBooks.add(book);
       else selectedBooks.delete(book);
     });
-
-    wrap.appendChild(checkbox);
-    wrap.appendChild(document.createTextNode(book));
-    booksContainer.appendChild(wrap);
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(bookSymbol[book] || book));
+    booksContainer.appendChild(label);
   });
 }
 
@@ -301,7 +337,7 @@ async function loadRaceData() {
 
 function renderMatrix() {
   if (!racesForDay.length) {
-    matrixWrap.innerHTML = "No races for this date.";
+    matrixWrap.innerHTML = '<div class="empty-state"><p>No races for this date.</p></div>';
     return;
   }
 
@@ -531,6 +567,13 @@ function renderBoardRows(data) {
   });
   updateSortIndicators();
 
+  if (!rows.length) {
+    tipsTable.style.display = "none";
+    return;
+  }
+
+  tipsTable.style.display = "";
+
   rows.forEach((tip) => {
     const tr = document.createElement("tr");
     if (tip.edge_pct > 5) tr.className = "row-value-strong";
@@ -542,8 +585,8 @@ function renderBoardRows(data) {
       <td><span class="form-string">${formatFormString(tip.form_last5)}</span></td>
       <td><button data-trainer="1">${escapeHtml(tip.trainer)}</button>${gradeHtml(tip.trainer_roi_pct)}</td>
       <td><button data-jockey="1">${escapeHtml(tip.jockey)}</button>${gradeHtml(tip.jockey_roi_pct)}</td>
-      <td class="col-predicted">$${tip.predicted_price.toFixed(2)}</td>
-      <td>$${tip.market_odds.toFixed(2)}</td>
+      <td class="col-predicted">${formatOdds(tip.predicted_price)}</td>
+      <td>${formatOdds(tip.market_odds)}</td>
       <td>${escapeHtml(tip.best_book_symbol)}</td>
       <td class="col-model">${Number(tip.model_prob_pct || 0).toFixed(2)}%</td>
       <td class="col-book">${Number(tip.bookmaker_pct || 0).toFixed(2)}%</td>
@@ -625,6 +668,7 @@ function renderBoardRows(data) {
 async function loadTipsForSelectedRace() {
   if (!selectedRaceId) {
     tipsBody.innerHTML = "";
+    tipsTable.style.display = "none";
     selectedRaceHeaderMeta = null;
     renderSelectedRaceTitle();
     if (raceMetaName) raceMetaName.textContent = "-";
@@ -639,9 +683,14 @@ async function loadTipsForSelectedRace() {
     return;
   }
 
+  if (boardLoading) boardLoading.hidden = false;
+  tipsTable.style.display = "none";
+
   const books = encodeURIComponent(selectedBookString());
   const data = await jsonFetch(`/api/races/${selectedRaceId}/board?min_edge=0&books=${books}`);
   lastBoardData = data;
+
+  if (boardLoading) boardLoading.hidden = true;
 
   selectedRaceHeaderMeta = {
     track: data.race.track,
@@ -668,28 +717,13 @@ async function loadTipsForSelectedRace() {
   }
 
   renderBoardRows(data);
+  renderRaceResults(data.results);
 }
 
 async function loadTracked() {
   const data = await jsonFetch("/api/tips/tracked");
   const prevCount = trackedTipsCache.length;
   trackedTipsCache = data.tips || [];
-  if (trackedBody) {
-    trackedBody.innerHTML = "";
-    trackedTipsCache.forEach((t) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${new Date(t.tracked_at).toLocaleString()}</td>
-        <td>${t.race_id}</td>
-        <td>${escapeHtml(t.horse_name)}</td>
-        <td>${escapeHtml(bookSymbol[t.bookmaker] || t.bookmaker)}</td>
-        <td>${Number(t.edge_pct).toFixed(2)}%</td>
-        <td>$${Number(t.odds_at_tip).toFixed(2)}</td>
-        <td>${escapeHtml(t.result)}</td>
-      `;
-      trackedBody.appendChild(tr);
-    });
-  }
   renderBetSlip();
 
   if (trackedTipsCache.length > prevCount && betSlipCount) {
@@ -741,6 +775,8 @@ function renderBetSlip() {
     const pl = profitLossUnits(b);
     const plText = pl == null ? "P/L: -" : `P/L: ${pl >= 0 ? "+" : ""}${pl.toFixed(2)}u`;
     const plClass = pl == null ? "edge-neutral" : edgeClass(pl);
+    const potentialPayout = b.result === "pending" ? Number(b.stake || 0) * Number(b.odds_at_tip || 0) : 0;
+    const potentialHtml = b.result === "pending" && potentialPayout > 0 ? `<div class="betslip-row"><span>Potential: <span class="betslip-potential">${potentialPayout.toFixed(2)}u</span></span></div>` : "";
     const item = document.createElement("div");
     item.className = "betslip-item";
     item.innerHTML = `
@@ -750,9 +786,10 @@ function renderBetSlip() {
       </div>
       <div class="betslip-horse">${escapeHtml(b.horse_name)}</div>
       <div class="betslip-row">
-        <span>${escapeHtml(bookSymbol[b.bookmaker] || b.bookmaker)} @ $${Number(b.odds_at_tip).toFixed(2)} | ${Number(b.stake || 0).toFixed(2)}u</span>
+        <span>${escapeHtml(bookSymbol[b.bookmaker] || b.bookmaker)} @ ${formatOdds(Number(b.odds_at_tip))} | ${Number(b.stake || 0).toFixed(2)}u</span>
         <span class="${showProfitLoss ? plClass : edgeClass(Number(b.edge_pct))}">${showProfitLoss ? plText : `${Number(b.edge_pct).toFixed(2)}%`}</span>
       </div>
+      ${potentialHtml}
       <div class="betslip-actions">
         <button class="betslip-icon-btn" data-edit-bet="1" title="Edit tracked bet">\u270E</button>
         <button class="betslip-icon-btn" data-delete-bet="1" title="Delete tracked bet">\uD83D\uDDD1</button>
@@ -773,6 +810,7 @@ function renderBetSlip() {
       const ok = confirm(`Delete tracked bet for ${b.horse_name}?`);
       if (!ok) return;
       await jsonFetch(`/api/tips/tracked/${b.id}`, { method: "DELETE" });
+      showToast("Bet deleted", "success");
       await loadTracked();
     });
     target.appendChild(item);
@@ -811,27 +849,34 @@ function tickSelectedRaceCountdown() {
 async function simulateMove() {
   if (!selectedRaceId) return;
   await jsonFetch(`/api/races/${selectedRaceId}/simulate-odds-move`, { method: "POST" });
+  showToast("Odds move simulated", "info");
   await loadRaceData();
   await loadTipsForSelectedRace();
 }
 
-selectAllBooksBtn.addEventListener("click", async () => {
-  selectedBooks = new Set(bookmakers);
-  renderBookmakers();
+async function simulateResult() {
+  if (!selectedRaceId) return;
+  const data = await jsonFetch(`/api/races/${selectedRaceId}/simulate-result`, { method: "POST" });
+  const s = data.settlement || {};
+  showToast(`Result simulated: ${s.won || 0} won, ${s.lost || 0} lost`, "success");
   await loadRaceData();
   await loadTipsForSelectedRace();
-});
+  await loadTracked();
+}
 
-clearAllBooksBtn.addEventListener("click", async () => {
-  selectedBooks = new Set();
-  renderBookmakers();
-  matrixWrap.innerHTML = "Select at least one bookmaker.";
-  tipsBody.innerHTML = "";
-  selectedRaceHeaderMeta = null;
-  selectedRaceJumpIso = null;
-  lastBoardData = null;
-  renderSelectedRaceTitle();
-});
+function renderRaceResults(results) {
+  if (!raceResultsEl) return;
+  if (!results || !results.length) {
+    raceResultsEl.hidden = true;
+    return;
+  }
+  raceResultsEl.hidden = false;
+  const sorted = [...results].sort((a, b) => a.finish_pos - b.finish_pos);
+  raceResultsEl.innerHTML = `<h3>Race Results</h3><div class="results-grid">${sorted.map((r) => {
+    const cls = r.finish_pos === 1 ? "result-item result-winner" : "result-item";
+    return `<div class="${cls}"><span class="result-pos">${r.finish_pos}</span><span class="result-name">${escapeHtml(r.horse_name)}</span></div>`;
+  }).join("")}</div>`;
+}
 
 refreshTipsBtn.addEventListener("click", async () => {
   await loadRaceData();
@@ -839,6 +884,7 @@ refreshTipsBtn.addEventListener("click", async () => {
 });
 
 simulateMoveBtn.addEventListener("click", simulateMove);
+simulateResultBtn?.addEventListener("click", simulateResult);
 modalSaveBtn?.addEventListener("click", saveTrackedBetFromModal);
 modalCancelBtn?.addEventListener("click", closeTrackModal);
 trackModal?.addEventListener("click", (e) => {
@@ -865,6 +911,7 @@ betSlipClearAll?.addEventListener("click", async () => {
   for (const b of dayBets) {
     await jsonFetch(`/api/tips/tracked/${b.id}`, { method: "DELETE" });
   }
+  showToast("All pending bets cleared", "success");
   await loadTracked();
 });
 
@@ -873,6 +920,7 @@ mobileSlipBtn?.addEventListener("click", () => {
 });
 
 raceDateInput.addEventListener("change", async () => {
+  saveFilter("board", "date", raceDateInput.value);
   await loadRaceData();
   await loadTipsForSelectedRace();
   renderBetSlip();
@@ -891,9 +939,26 @@ document.querySelectorAll("#tipsTable thead th[data-sort]").forEach((th) => {
   });
 });
 
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea, select")) return;
+  if (e.key === "Escape") {
+    document.querySelectorAll(".modal:not(.hidden)").forEach((m) => m.classList.add("hidden"));
+    return;
+  }
+  if (e.key === "r" || e.key === "R") {
+    loadRaceData().then(() => loadTipsForSelectedRace()).then(() => loadTracked());
+    return;
+  }
+  if (e.key >= "1" && e.key <= "5") {
+    const pages = ["/", "/tips", "/my-bets", "/stats", "/settings"];
+    window.location.href = pages[Number(e.key) - 1];
+  }
+});
+
 async function init() {
   syncThemeMode();
-  raceDateInput.value = todayIso();
+  const savedDate = loadFilter("board", "date", "");
+  raceDateInput.value = savedDate || todayIso();
   await loadBookmakers();
   await loadRaceData();
   await loadTipsForSelectedRace();
@@ -909,5 +974,5 @@ async function init() {
 
 init().catch((err) => {
   console.error(err);
-  alert(`Failed to initialize app: ${err.message}`);
+  showToast(`Failed to initialize: ${err.message}`, "error");
 });

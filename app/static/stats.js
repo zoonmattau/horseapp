@@ -31,9 +31,30 @@ const jockeyBody = document.querySelector("#jockeyTable tbody");
 const trainerBody = document.querySelector("#trainerTable tbody");
 const leaderJockeyBody = document.querySelector("#leaderJockeyTable tbody");
 const leaderTrainerBody = document.querySelector("#leaderTrainerTable tbody");
+const toastContainer = document.getElementById("toastContainer");
+
+function saveFilter(page, field, value) {
+  localStorage.setItem(`horse_filter_${page}_${field}`, value);
+}
+
+function loadFilter(page, field, fallback) {
+  return localStorage.getItem(`horse_filter_${page}_${field}`) ?? fallback;
+}
 
 let rawStatsData = null;
 let backendRefreshTimer = null;
+
+function showToast(message, type = "info") {
+  if (!toastContainer) return;
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+  setTimeout(() => {
+    toast.style.animation = "toast-out 300ms ease forwards";
+    toast.addEventListener("animationend", () => toast.remove());
+  }, 3000);
+}
 
 function applyThemeFromPreference() {
   const pref = (localStorage.getItem("horse_theme_pref") || "system").toLowerCase();
@@ -71,7 +92,7 @@ function debounceBackendRefresh() {
   backendRefreshTimer = setTimeout(() => {
     refreshStats().catch((err) => {
       console.error(err);
-      alert(`Failed to load stats: ${err.message}`);
+      showToast(`Failed to load stats: ${err.message}`, "error");
     });
   }, 250);
 }
@@ -216,14 +237,11 @@ function renderBarChart(root, rows, { labelKey, valueKey, valueSuffix = "%" }) {
     root.innerHTML = '<p class="muted">No data.</p>';
     return;
   }
-
   const maxAbs = Math.max(...rows.map((r) => Math.abs(num(r[valueKey]))), 1);
-
   rows.forEach((row) => {
     const value = num(row[valueKey]);
     const direction = value >= 0 ? "positive" : "negative";
     const width = `${(Math.abs(value) / maxAbs) * 100}%`;
-
     const item = document.createElement("div");
     item.className = "bar-item";
     item.innerHTML = `
@@ -358,6 +376,39 @@ async function fetchStatsData() {
   rawStatsData = await jsonFetch(`/api/stats/dashboard${query}`);
 }
 
+function saveStatsFilters() {
+  saveFilter("stats", "track", trackFilter.value);
+  saveFilter("stats", "surface", surfaceFilter.value);
+  saveFilter("stats", "roiMode", roiModeFilter.value);
+  saveFilter("stats", "minRuns", minRunsFilter.value);
+  saveFilter("stats", "minBack", minBackNumberFilter.value);
+  saveFilter("stats", "maxBack", maxBackNumberFilter.value);
+  saveFilter("stats", "minBarrier", minBarrierFilter.value);
+  saveFilter("stats", "maxBarrier", maxBarrierFilter.value);
+  saveFilter("stats", "minDist", minDistanceFilter.value);
+  saveFilter("stats", "maxDist", maxDistanceFilter.value);
+  saveFilter("stats", "minRoi", minRoiFilter.value);
+  saveFilter("stats", "maxRoi", maxRoiFilter.value);
+  saveFilter("stats", "nameSearch", nameSearchFilter.value);
+  saveFilter("stats", "topN", topNFilter.value);
+}
+
+function restoreStatsFilters() {
+  surfaceFilter.value = loadFilter("stats", "surface", "all");
+  roiModeFilter.value = loadFilter("stats", "roiMode", "all");
+  minRunsFilter.value = loadFilter("stats", "minRuns", "0");
+  minBackNumberFilter.value = loadFilter("stats", "minBack", "");
+  maxBackNumberFilter.value = loadFilter("stats", "maxBack", "");
+  minBarrierFilter.value = loadFilter("stats", "minBarrier", "");
+  maxBarrierFilter.value = loadFilter("stats", "maxBarrier", "");
+  minDistanceFilter.value = loadFilter("stats", "minDist", "");
+  maxDistanceFilter.value = loadFilter("stats", "maxDist", "");
+  minRoiFilter.value = loadFilter("stats", "minRoi", "");
+  maxRoiFilter.value = loadFilter("stats", "maxRoi", "");
+  nameSearchFilter.value = loadFilter("stats", "nameSearch", "");
+  topNFilter.value = loadFilter("stats", "topN", "8");
+}
+
 function clearStatsFilters() {
   surfaceFilter.value = "all";
   roiModeFilter.value = "all";
@@ -372,9 +423,10 @@ function clearStatsFilters() {
   maxRoiFilter.value = "";
   nameSearchFilter.value = "";
   topNFilter.value = "8";
+  saveStatsFilters();
   refreshStats().catch((err) => {
     console.error(err);
-    alert(`Failed to load stats: ${err.message}`);
+    showToast(`Failed to load stats: ${err.message}`, "error");
   });
 }
 
@@ -383,29 +435,65 @@ async function refreshStats() {
   applyUiFiltersAndRender();
 }
 
-refreshStatsBtn.addEventListener("click", refreshStats);
-trackFilter.addEventListener("change", refreshStats);
+refreshStatsBtn.addEventListener("click", () => {
+  refreshStats().catch((err) => {
+    console.error(err);
+    showToast(`Failed to load stats: ${err.message}`, "error");
+  });
+});
+trackFilter.addEventListener("change", () => {
+  saveStatsFilters();
+  refreshStats().catch((err) => {
+    console.error(err);
+    showToast(`Failed to load stats: ${err.message}`, "error");
+  });
+});
 [minBackNumberFilter, maxBackNumberFilter, minBarrierFilter, maxBarrierFilter, minDistanceFilter, maxDistanceFilter]
   .forEach((el) => {
-    el.addEventListener("input", debounceBackendRefresh);
-    el.addEventListener("change", refreshStats);
+    el.addEventListener("input", () => { saveStatsFilters(); debounceBackendRefresh(); });
+    el.addEventListener("change", () => {
+      saveStatsFilters();
+      refreshStats().catch((err) => {
+        console.error(err);
+        showToast(`Failed to load stats: ${err.message}`, "error");
+      });
+    });
   });
 
 [surfaceFilter, roiModeFilter, minRunsFilter, minRoiFilter, maxRoiFilter, nameSearchFilter, topNFilter]
   .forEach((el) => {
-    el.addEventListener("input", applyUiFiltersAndRender);
-    el.addEventListener("change", applyUiFiltersAndRender);
+    el.addEventListener("input", () => { saveStatsFilters(); applyUiFiltersAndRender(); });
+    el.addEventListener("change", () => { saveStatsFilters(); applyUiFiltersAndRender(); });
   });
 
 clearStatsFiltersBtn?.addEventListener("click", clearStatsFilters);
 
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea, select")) return;
+  if (e.key === "Escape") return;
+  if (e.key === "r" || e.key === "R") {
+    refreshStats().catch(console.error);
+    return;
+  }
+  if (e.key >= "1" && e.key <= "5") {
+    const pages = ["/", "/tips", "/my-bets", "/stats", "/settings"];
+    window.location.href = pages[Number(e.key) - 1];
+  }
+});
+
 async function init() {
   applyThemeFromPreference();
   await loadFilters();
+  // Restore track filter after dropdown is populated
+  const savedTrack = loadFilter("stats", "track", "");
+  if (savedTrack && [...trackFilter.options].some((o) => o.value === savedTrack)) {
+    trackFilter.value = savedTrack;
+  }
+  restoreStatsFilters();
   await refreshStats();
 }
 
 init().catch((err) => {
   console.error(err);
-  alert(`Failed to load stats: ${err.message}`);
+  showToast(`Failed to load stats: ${err.message}`, "error");
 });

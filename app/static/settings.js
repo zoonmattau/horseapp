@@ -10,13 +10,26 @@ const defaultStakeInput = document.getElementById("defaultStake");
 const bankrollUnitsInput = document.getElementById("bankrollUnits");
 const autoSettleEnabledInput = document.getElementById("autoSettleEnabled");
 const analyticsTopNInput = document.getElementById("analyticsTopN");
-const settingsStatus = document.getElementById("settingsStatus");
 const exportBox = document.getElementById("settingsExport");
+const importFileInput = document.getElementById("importSettingsFile");
+const toastContainer = document.getElementById("toastContainer");
 
 const saveProfileBtn = document.getElementById("saveProfile");
 const saveSettingsBtn = document.getElementById("saveSettings");
 const exportSettingsBtn = document.getElementById("exportSettings");
 const resetSettingsBtn = document.getElementById("resetSettings");
+
+function showToast(message, type = "info") {
+  if (!toastContainer) return;
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+  setTimeout(() => {
+    toast.style.animation = "toast-out 300ms ease forwards";
+    toast.addEventListener("animationend", () => toast.remove());
+  }, 3000);
+}
 
 function applyThemePreference(themePref) {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -25,15 +38,6 @@ function applyThemePreference(themePref) {
     return;
   }
   document.documentElement.setAttribute("data-theme", mq.matches ? "dark" : "light");
-}
-
-function setStatus(message, tone = "neutral") {
-  if (!settingsStatus) return;
-  settingsStatus.textContent = message;
-  settingsStatus.classList.remove("edge-positive", "edge-negative", "edge-neutral");
-  settingsStatus.classList.add(
-    tone === "ok" ? "edge-positive" : tone === "error" ? "edge-negative" : "edge-neutral"
-  );
 }
 
 function sanitizeNumber(input, fallback) {
@@ -89,7 +93,6 @@ async function loadSettings() {
 }
 
 async function saveProfile() {
-  setStatus("Saving profile...", "neutral");
   await jsonFetch("/api/user/profile", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -98,11 +101,10 @@ async function saveProfile() {
       email: emailInput.value.trim(),
     }),
   });
-  setStatus("Profile saved.", "ok");
+  showToast("Profile saved", "success");
 }
 
 async function saveSettings() {
-  setStatus("Saving settings...", "neutral");
   const payload = collectSettingsPayload();
   await jsonFetch("/api/user/settings", {
     method: "POST",
@@ -114,8 +116,10 @@ async function saveSettings() {
   localStorage.setItem("horse_odds_format", payload.odds_format);
   localStorage.setItem("horse_default_stake", String(payload.default_stake));
   localStorage.setItem("horse_analytics_top_n", String(payload.analytics_top_n));
+  localStorage.setItem("horse_notifications_enabled", String(payload.notifications_enabled));
+  localStorage.setItem("horse_notify_min_edge", String(payload.notify_min_edge));
   applyThemePreference(payload.theme);
-  setStatus("Settings saved.", "ok");
+  showToast("Settings saved", "success");
 }
 
 function downloadJson(filename, data) {
@@ -131,7 +135,6 @@ function downloadJson(filename, data) {
 }
 
 async function exportSettings() {
-  setStatus("Exporting settings...", "neutral");
   const data = await jsonFetch("/api/user/settings/export");
   const ts = new Date().toISOString().replaceAll(":", "-");
   downloadJson(`horseedge-settings-${ts}.json`, data);
@@ -139,63 +142,106 @@ async function exportSettings() {
     exportBox.hidden = false;
     exportBox.textContent = JSON.stringify(data, null, 2);
   }
-  setStatus("Settings exported.", "ok");
+  showToast("Settings exported", "success");
+}
+
+async function importSettings(file) {
+  const text = await file.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    showToast("Invalid JSON file", "error");
+    return;
+  }
+  if (!data.profile && !data.settings) {
+    showToast("File must contain 'profile' or 'settings' key", "error");
+    return;
+  }
+  await jsonFetch("/api/user/settings/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  await loadProfile();
+  await loadSettings();
+  showToast("Settings imported successfully", "success");
 }
 
 async function resetSettings() {
   const ok = confirm("Reset all settings to defaults?");
   if (!ok) return;
 
-  setStatus("Resetting settings...", "neutral");
   const data = await jsonFetch("/api/user/settings/reset", { method: "POST" });
   applySettingsToForm(data.settings || {});
   localStorage.removeItem("horse_theme_pref");
   localStorage.removeItem("horse_odds_format");
   localStorage.removeItem("horse_default_stake");
   localStorage.removeItem("horse_analytics_top_n");
-  setStatus("Settings reset to defaults.", "ok");
+  showToast("Settings reset to defaults", "success");
 }
 
 saveProfileBtn.addEventListener("click", () => {
   saveProfile().catch((err) => {
     console.error(err);
-    setStatus(`Profile save failed: ${err.message}`, "error");
+    showToast(`Profile save failed: ${err.message}`, "error");
   });
 });
 
 saveSettingsBtn.addEventListener("click", () => {
   saveSettings().catch((err) => {
     console.error(err);
-    setStatus(`Settings save failed: ${err.message}`, "error");
+    showToast(`Settings save failed: ${err.message}`, "error");
   });
 });
 
 exportSettingsBtn?.addEventListener("click", () => {
   exportSettings().catch((err) => {
     console.error(err);
-    setStatus(`Export failed: ${err.message}`, "error");
+    showToast(`Export failed: ${err.message}`, "error");
   });
 });
 
 resetSettingsBtn?.addEventListener("click", () => {
   resetSettings().catch((err) => {
     console.error(err);
-    setStatus(`Reset failed: ${err.message}`, "error");
+    showToast(`Reset failed: ${err.message}`, "error");
   });
+});
+
+importFileInput?.addEventListener("change", () => {
+  const file = importFileInput.files?.[0];
+  if (!file) return;
+  importSettings(file).catch((err) => {
+    console.error(err);
+    showToast(`Import failed: ${err.message}`, "error");
+  });
+  importFileInput.value = "";
 });
 
 themeInput?.addEventListener("change", () => {
   applyThemePreference(themeInput.value || "system");
 });
 
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea, select")) return;
+  if (e.key === "Escape") return;
+  if (e.key >= "1" && e.key <= "5") {
+    const pages = ["/", "/tips", "/my-bets", "/stats", "/settings"];
+    window.location.href = pages[Number(e.key) - 1];
+  }
+});
+
 async function init() {
-  setStatus("Loading settings...", "neutral");
+  applyThemePreference(
+    (localStorage.getItem("horse_theme_pref") || "system").toLowerCase()
+  );
   await loadProfile();
   await loadSettings();
-  setStatus("Ready", "ok");
+  showToast("Settings loaded", "info");
 }
 
 init().catch((err) => {
   console.error(err);
-  setStatus(`Failed to load settings: ${err.message}`, "error");
+  showToast(`Failed to load settings: ${err.message}`, "error");
 });

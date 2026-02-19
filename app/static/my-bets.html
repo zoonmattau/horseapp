@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=20260218a" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260220a" />
 </head>
 <body>
   <nav class="topbar" aria-label="Main navigation">
@@ -16,6 +16,10 @@
       HorseEdge
     </a>
     <div class="topbar-links">
+      <a href="/dashboard" class="topbar-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </a>
       <a href="/" class="topbar-link">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Race Board
@@ -41,9 +45,9 @@
 
   <nav class="bottom-tabs" aria-label="Mobile navigation">
     <div class="bottom-tabs-inner">
-      <a href="/" class="bottom-tab">
+      <a href="/dashboard" class="bottom-tab">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-        Board
+        Home
       </a>
       <a href="/tips" class="bottom-tab">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg>
@@ -66,37 +70,23 @@
 
   <main class="page page-bets">
     <section class="card">
-      <div class="panel-head">
-        <h2>Bet Log</h2>
-        <div class="bets-log-actions">
-          <label for="rangeFilter">Range</label>
-          <select id="rangeFilter">
-            <option value="all">All Time</option>
-            <option value="today">Today</option>
-            <option value="yesterday">Yesterday</option>
-            <option value="week">Last 7 Days</option>
-            <option value="month">Last 30 Days</option>
-          </select>
-          <button id="settlePending" class="btn btn-secondary">Settle Pending</button>
-          <button id="toggleAnalytics" class="btn btn-secondary">Show Analytics</button>
-        </div>
-      </div>
-
       <details class="filter-panel" id="betsFilterPanel">
-        <summary>Filters <span id="betsFilterSummary" class="filters-summary" style="margin-left:auto">No active filters</span></summary>
+        <summary>
+          Filters
+          <span id="betsFilterSummary" class="filters-summary" style="margin-left:auto">No active filters</span>
+        </summary>
         <div class="filter-panel-body">
-          <div id="betsFilterPills" class="filter-pills"></div>
-          <div class="filter-grid">
-            <div class="filter-field">
-              <label for="betsTrackFilter">Track</label>
-              <select id="betsTrackFilter"><option value="all">All Tracks</option></select>
-            </div>
-            <div class="filter-field">
-              <label for="betsBookFilter">Book</label>
-              <select id="betsBookFilter"><option value="all">All Books</option></select>
-            </div>
-            <div class="filter-field">
-              <label for="betsResultFilter">Result</label>
+          <div class="filter-row-top">
+            <label for="rangeFilter">Range
+              <select id="rangeFilter">
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="week">Last 7 Days</option>
+                <option value="month">Last 30 Days</option>
+              </select>
+            </label>
+            <label for="betsResultFilter">Result
               <select id="betsResultFilter">
                 <option value="all">All Results</option>
                 <option value="won">Won</option>
@@ -104,82 +94,127 @@
                 <option value="pending">Pending</option>
                 <option value="settled">Settled</option>
               </select>
+            </label>
+            <label for="betsBookFilter">Book
+              <select id="betsBookFilter"><option value="all">All Books</option></select>
+            </label>
+          </div>
+          <div id="betsFilterPills" class="filter-pills"></div>
+          <div class="filter-groups">
+            <div class="filter-group">
+              <div class="filter-group-label">Odds</div>
+              <div class="filter-range-pair">
+                <input id="betsMinOddsFilter" type="number" step="0.01" min="1.01" placeholder="Min" />
+                <span class="filter-range-sep">–</span>
+                <input id="betsMaxOddsFilter" type="number" step="0.01" min="1.01" placeholder="Max" />
+              </div>
             </div>
-            <div class="filter-field">
-              <label for="betsMinEdgeFilter">Min Edge %</label>
-              <input id="betsMinEdgeFilter" type="number" step="0.1" placeholder="any" />
+            <div class="filter-group">
+              <div class="filter-group-label">Edge %</div>
+              <div class="filter-range-pair">
+                <input id="betsMinEdgeFilter" type="number" step="0.1" placeholder="Min" />
+              </div>
             </div>
-            <div class="filter-field">
-              <label for="betsMinOddsFilter">Min Odds</label>
-              <input id="betsMinOddsFilter" type="number" step="0.01" min="1.01" placeholder="any" />
+            <div class="filter-group">
+              <div class="filter-group-label">Runs Back</div>
+              <select id="betsMinBackNumberFilter">
+                <option value="">All</option>
+                <option value="1">1st up</option>
+                <option value="2">2nd up</option>
+                <option value="3">3rd up</option>
+                <option value="4">4th up</option>
+                <option value="5">5th up+</option>
+              </select>
+              <input id="betsMaxBackNumberFilter" type="hidden" value="" />
             </div>
-            <div class="filter-field">
-              <label for="betsMaxOddsFilter">Max Odds</label>
-              <input id="betsMaxOddsFilter" type="number" step="0.01" min="1.01" placeholder="any" />
+            <div class="filter-group">
+              <div class="filter-group-label">Barrier</div>
+              <div class="filter-range-pair">
+                <input id="betsMinBarrierFilter" type="number" min="1" step="1" placeholder="Min" />
+                <span class="filter-range-sep">–</span>
+                <input id="betsMaxBarrierFilter" type="number" min="1" step="1" placeholder="Max" />
+              </div>
             </div>
-            <div class="filter-field">
-              <label for="betsMinBackNumberFilter">Min Back #</label>
-              <input id="betsMinBackNumberFilter" type="number" min="1" step="1" placeholder="any" />
+            <div class="filter-group">
+              <div class="filter-group-label">Distance (m)</div>
+              <div class="filter-range-pair">
+                <input id="betsMinDistanceFilter" type="number" min="800" step="100" placeholder="Min" />
+                <span class="filter-range-sep">–</span>
+                <input id="betsMaxDistanceFilter" type="number" min="800" step="100" placeholder="Max" />
+              </div>
             </div>
-            <div class="filter-field">
-              <label for="betsMaxBackNumberFilter">Max Back #</label>
-              <input id="betsMaxBackNumberFilter" type="number" min="1" step="1" placeholder="any" />
+            <div class="filter-group">
+              <div class="filter-group-label">Track</div>
+              <select id="betsTrackFilter" multiple size="4"></select>
             </div>
-            <div class="filter-field">
-              <label for="betsMinBarrierFilter">Min Barrier</label>
-              <input id="betsMinBarrierFilter" type="number" min="1" step="1" placeholder="any" />
+            <div class="filter-group">
+              <div class="filter-group-label">Jockey</div>
+              <select id="betsJockeyFilter" multiple size="4"></select>
             </div>
-            <div class="filter-field">
-              <label for="betsMaxBarrierFilter">Max Barrier</label>
-              <input id="betsMaxBarrierFilter" type="number" min="1" step="1" placeholder="any" />
+            <div class="filter-group">
+              <div class="filter-group-label">Trainer</div>
+              <select id="betsTrainerFilter" multiple size="4"></select>
             </div>
-            <div class="filter-field">
-              <label for="betsMinDistanceFilter">Min Distance</label>
-              <input id="betsMinDistanceFilter" type="number" min="800" step="100" placeholder="meters" />
-            </div>
-            <div class="filter-field">
-              <label for="betsMaxDistanceFilter">Max Distance</label>
-              <input id="betsMaxDistanceFilter" type="number" min="800" step="100" placeholder="meters" />
-            </div>
-            <div class="filter-field" style="grid-column: span 2">
-              <label for="betsSearchFilter">Search</label>
+            <div class="filter-group filter-group-search">
+              <div class="filter-group-label">Search</div>
               <input id="betsSearchFilter" type="text" placeholder="horse / track / bookmaker" />
             </div>
           </div>
           <div class="filter-actions">
             <button id="clearBetsFilters" class="btn btn-ghost" type="button">Clear Filters</button>
+            <button id="settlePending" class="btn btn-secondary">Settle Pending</button>
           </div>
         </div>
       </details>
-
-      <div id="betsTotals" class="bets-totals"></div>
-
-      <div id="betsLoading" class="skeleton-table" hidden>
-        <div class="skeleton skeleton-row"></div>
-        <div class="skeleton skeleton-row"></div>
-        <div class="skeleton skeleton-row"></div>
-      </div>
-      <table id="betsTable">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Track</th>
-            <th>Race</th>
-            <th>Horse</th>
-            <th>Book</th>
-            <th>Odds</th>
-            <th>Stake</th>
-            <th>Edge %</th>
-            <th>P/L</th>
-            <th>Result</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
     </section>
 
-    <section id="analyticsPanel" class="card" hidden>
+    <section class="card">
+      <div class="panel-head">
+        <h2>P&amp;L Over Time <span id="plTotalBadge" class="badge" style="margin-left:var(--sp-2);font-size:var(--text-sm);font-family:var(--mono)"></span></h2>
+        <div class="pl-period-btns">
+          <button class="btn btn-ghost btn-sm pl-period active" data-period="all">All</button>
+          <button class="btn btn-ghost btn-sm pl-period" data-period="90">90D</button>
+          <button class="btn btn-ghost btn-sm pl-period" data-period="30">30D</button>
+          <button class="btn btn-ghost btn-sm pl-period" data-period="7">7D</button>
+        </div>
+      </div>
+      <div id="plChartWrap" class="pl-chart-wrap"></div>
+      <div id="plChartStats" class="pl-chart-stats"></div>
+    </section>
+
+    <section class="card">
+      <details id="betLogDetails">
+        <summary class="bet-log-summary">
+          <span class="bet-log-title">Bet Log</span>
+        </summary>
+        <div id="betsTotals" class="bets-totals"></div>
+        <div id="betsLoading" class="skeleton-table" hidden>
+          <div class="skeleton skeleton-row"></div>
+          <div class="skeleton skeleton-row"></div>
+          <div class="skeleton skeleton-row"></div>
+        </div>
+        <table id="betsTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Track</th>
+              <th>Race</th>
+              <th>Horse</th>
+              <th>Book</th>
+              <th>Odds</th>
+              <th>Stake</th>
+              <th>Edge %</th>
+              <th>P/L</th>
+              <th>Result</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </details>
+    </section>
+
+    <section id="analyticsPanel" class="card">
       <h2>Bet Analytics</h2>
       <div class="tabs" id="analyticsTabs">
         <button class="tab-btn active" data-tab="market">Market</button>
@@ -234,6 +269,6 @@
   </div>
 
   <div id="toastContainer" class="toast-container"></div>
-  <script src="/static/my-bets.js?v=20260218a"></script>
+  <script src="/static/my-bets.js?v=20260220a"></script>
 </body>
 </html>

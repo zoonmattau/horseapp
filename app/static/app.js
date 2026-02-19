@@ -55,6 +55,9 @@ let valueFilterActive = false;
 let lastBoardData = null;
 let boardSortKey = "edge_pct";
 let boardSortAsc = false;
+let lastRefreshTime = null;
+
+const lastUpdatedEl = document.getElementById("lastUpdated");
 
 function showToast(message, type = "info") {
   if (!toastContainer) return;
@@ -116,32 +119,49 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function toJumpCountdown(raceDate, jumpTime) {
-  if (!raceDate || !jumpTime) return "-";
-  const target = new Date(`${raceDate}T${jumpTime}:00`);
-  const now = new Date();
-  const diffMs = target.getTime() - now.getTime();
-  const absMinutes = Math.floor(Math.abs(diffMs) / 60000);
-  const h = Math.floor(absMinutes / 60);
-  const m = absMinutes % 60;
-  if (diffMs >= 0) {
-    if (h > 0) return `in ${h}h ${m}m`;
-    return `in ${m}m`;
+function formatCountdown(iso) {
+  if (!iso) return "-";
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff < -180000) {
+    const abs = Math.abs(diff);
+    const mins = Math.floor(abs / 60000);
+    const hh = Math.floor(mins / 60);
+    const mm = mins % 60;
+    return hh > 0 ? `${hh}h ${mm}m ago` : `${mm}m ago`;
   }
-  if (h > 0) return `${h}h ${m}m ago`;
-  return `${m}m ago`;
+  if (diff < 0) return "Jumping";
+  const totalSec = Math.floor(diff / 1000);
+  if (totalSec < 300) {
+    const mm = Math.floor(totalSec / 60);
+    const ss = String(totalSec % 60).padStart(2, "0");
+    return mm > 0 ? `${mm}m ${ss}s` : `${ss}s`;
+  }
+  const mins = Math.floor(diff / 60000);
+  const hh = Math.floor(mins / 60);
+  const mm = mins % 60;
+  return hh > 0 ? `${hh}h ${mm}m` : `${mm}m`;
+}
+
+function raceStatusClass(iso) {
+  if (!iso) return "race-upcoming";
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff < -180000) return "race-jumped";
+  if (diff < 60000)   return "race-live";
+  if (diff < 300000)  return "race-imminent";
+  return "race-upcoming";
+}
+
+// Legacy wrappers for backward compat
+function toJumpCountdown(raceDate, jumpTime) {
+  return raceDate && jumpTime ? formatCountdown(`${raceDate}T${jumpTime}:00`) : "-";
 }
 
 function countdownLabel(raceDate, jumpTime) {
-  if (!raceDate || !jumpTime) return "-";
-  const target = new Date(`${raceDate}T${jumpTime}:00`);
-  const now = new Date();
-  const diff = target.getTime() - now.getTime();
-  const mins = Math.floor(Math.abs(diff) / 60000);
-  const hh = Math.floor(mins / 60);
-  const mm = mins % 60;
-  if (diff >= 0) return hh > 0 ? `${hh}h ${mm}m` : `${mm}m`;
-  return "jumped";
+  return raceDate && jumpTime ? formatCountdown(`${raceDate}T${jumpTime}:00`) : "-";
+}
+
+function countdownFromIso(iso) {
+  return formatCountdown(iso);
 }
 
 function localJumpLabel(raceDate, jumpTime) {
@@ -153,17 +173,6 @@ function localJumpLabel(raceDate, jumpTime) {
     minute: "2-digit",
     timeZoneName: "short",
   }).format(d);
-}
-
-function countdownFromIso(iso) {
-  if (!iso) return "-";
-  const target = new Date(iso);
-  const now = new Date();
-  const diff = target.getTime() - now.getTime();
-  const mins = Math.floor(Math.abs(diff) / 60000);
-  const hh = Math.floor(mins / 60);
-  const mm = mins % 60;
-  return diff >= 0 ? (hh > 0 ? `${hh}h ${mm}m` : `${mm}m`) : "jumped";
 }
 
 function renderSelectedRaceTitle() {
@@ -244,8 +253,28 @@ function openTrackModal(payload) {
   if (trackModalMeta) {
     trackModalMeta.textContent = `${payload.track || ""} R${payload.race_number || ""} - ${payload.horse_name || ""}`;
   }
-  if (modalOddsInput) modalOddsInput.value = Number(payload.odds_at_tip || payload.market_odds || 0).toFixed(2);
+  const odds = Number(payload.odds_at_tip || payload.market_odds || 0);
+  if (modalOddsInput) modalOddsInput.value = odds.toFixed(2);
   if (modalStakeInput) modalStakeInput.value = "1.00";
+
+  const kellyHint = document.getElementById("kellyHint");
+  if (kellyHint) {
+    if (payload.mode !== "edit" && payload.edge_pct != null && odds > 1) {
+      const k = computeKelly(payload.edge_pct, odds);
+      if (k && Number(k) > 0) {
+        kellyHint.hidden = false;
+        kellyHint.innerHTML = `½ Kelly: <span class="kelly-value" id="kellyApply">${k}u</span>`;
+        document.getElementById("kellyApply")?.addEventListener("click", () => {
+          if (modalStakeInput) modalStakeInput.value = k;
+        });
+      } else {
+        kellyHint.hidden = true;
+      }
+    } else {
+      kellyHint.hidden = true;
+    }
+  }
+
   trackModal?.classList.remove("hidden");
 }
 
@@ -327,6 +356,8 @@ async function loadRaceData() {
   ]);
   racesForDay = racesResp.races;
   tipSignals = signalsResp.signals || {};
+  lastRefreshTime = Date.now();
+  if (lastUpdatedEl) lastUpdatedEl.textContent = "Just updated";
 
   if (!selectedRaceId || !racesForDay.some((r) => String(r.id) === String(selectedRaceId))) {
     selectedRaceId = racesForDay.length ? racesForDay[0].id : null;
@@ -371,14 +402,16 @@ function renderMatrix() {
         const signal = tipSignals[String(race.id)] || { has_tip: false, tip_count: 0, max_edge: 0 };
         const selectedClass = String(selectedRaceId) === String(race.id) ? "selected" : "";
         const icon = signal.has_tip ? `<span class="matrix-tip-icon" title="${signal.tip_count} tip(s)"></span>` : "";
-        const jump = toJumpCountdown(race.race_date, race.jump_time);
-        const edgeStr = signal.max_edge > 0 ? `<div class="matrix-edge ${edgeClass(signal.max_edge)}">+${signal.max_edge.toFixed(1)}%</div>` : "";
+        const jumpIso = `${race.race_date}T${race.jump_time}:00`;
+        const jump = formatCountdown(jumpIso);
+        const statusCls = raceStatusClass(jumpIso);
+        const edgeStr = "";
         const tipsStr = signal.tip_count > 0 ? `<div class="matrix-tips">${signal.tip_count} tip${signal.tip_count > 1 ? "s" : ""}</div>` : "";
         const edgeBorder = signal.max_edge > 5 ? "edge-strong" : signal.max_edge > 0 ? "edge-weak" : "";
         td.innerHTML = `
-          <button class="matrix-btn ${selectedClass} ${edgeBorder}" data-race-id="${race.id}">
+          <button class="matrix-btn ${selectedClass} ${edgeBorder} ${statusCls}" data-race-id="${race.id}" data-jump-iso="${jumpIso}">
             ${icon}
-            <span class="matrix-time">${escapeHtml(jump)}</span>
+            <span class="matrix-time" data-countdown="1">${escapeHtml(jump)}</span>
             ${edgeStr}
             ${tipsStr}
           </button>
@@ -590,7 +623,6 @@ function renderBoardRows(data) {
       <td>${escapeHtml(tip.best_book_symbol)}</td>
       <td class="col-model">${Number(tip.model_prob_pct || 0).toFixed(2)}%</td>
       <td class="col-book">${Number(tip.bookmaker_pct || 0).toFixed(2)}%</td>
-      <td class="${edgeClass(tip.edge_pct)}">${tip.edge_pct.toFixed(2)}%</td>
       <td><a href="${escapeHtml(tip.bet_url)}" target="_blank" rel="noreferrer">Bet</a></td>
       <td><button data-track="1">+ Slip</button></td>
     `;
@@ -826,6 +858,34 @@ function renderBetSlip() {
   }
 }
 
+function tickMatrixCountdowns() {
+  matrixWrap.querySelectorAll("button[data-jump-iso]").forEach((btn) => {
+    const iso = btn.getAttribute("data-jump-iso");
+    const timeEl = btn.querySelector("[data-countdown]");
+    const status = raceStatusClass(iso);
+    btn.classList.remove("race-upcoming", "race-imminent", "race-live", "race-jumped");
+    btn.classList.add(status);
+    if (timeEl) timeEl.textContent = formatCountdown(iso);
+  });
+}
+
+function tickLastUpdated() {
+  if (!lastRefreshTime || !lastUpdatedEl) return;
+  const secs = Math.floor((Date.now() - lastRefreshTime) / 1000);
+  lastUpdatedEl.textContent = secs < 5 ? "Just updated" : `Updated ${secs}s ago`;
+}
+
+function computeKelly(edgePct, decimalOdds) {
+  const bankroll = Number(localStorage.getItem("horse_bankroll_units") || "100");
+  const b = decimalOdds - 1;
+  if (b <= 0 || edgePct == null) return null;
+  const p = (1 / decimalOdds) * (1 + edgePct / 100);
+  const q = 1 - p;
+  const kelly = (b * p - q) / b;
+  if (kelly <= 0) return null;
+  return ((kelly * 0.5) * bankroll).toFixed(2); // half-Kelly for safety
+}
+
 function tickBetSlipCountdowns() {
   if (!betSlipNext && !betSlipDone) return;
   const now = Date.now();
@@ -970,6 +1030,8 @@ async function init() {
   }, 30000);
   setInterval(tickBetSlipCountdowns, 1000);
   setInterval(tickSelectedRaceCountdown, 1000);
+  setInterval(tickMatrixCountdowns, 1000);
+  setInterval(tickLastUpdated, 1000);
 }
 
 init().catch((err) => {

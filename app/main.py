@@ -968,6 +968,11 @@ def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/dashboard")
+def dashboard_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "dashboard.html")
+
+
 @app.get("/tips")
 def tips_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "tips.html")

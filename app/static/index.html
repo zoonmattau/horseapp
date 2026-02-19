@@ -16,6 +16,10 @@
       HorseEdge
     </a>
     <div class="topbar-links">
+      <a href="/dashboard" class="topbar-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </a>
       <a href="/" class="topbar-link active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Race Board
@@ -42,9 +46,9 @@
 
   <nav class="bottom-tabs" aria-label="Mobile navigation">
     <div class="bottom-tabs-inner">
-      <a href="/" class="bottom-tab active">
+      <a href="/dashboard" class="bottom-tab active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-        Board
+        Home
       </a>
       <a href="/tips" class="bottom-tab">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg>
@@ -75,6 +79,7 @@
         <button id="refreshTips" class="btn btn-primary">Refresh</button>
         <button id="simulateMove" class="btn btn-secondary">Simulate odds move</button>
         <button id="simulateResult" class="btn btn-secondary">Simulate result</button>
+        <span id="lastUpdated" class="last-updated"></span>
       </div>
     </section>
 
@@ -166,7 +171,6 @@
               <th>Best</th>
               <th data-sort="model_prob_pct" class="col-model" style="cursor:pointer">Model %</th>
               <th data-sort="bookmaker_pct" class="col-book" style="cursor:pointer">Book %</th>
-              <th data-sort="edge_pct" style="cursor:pointer">Edge %</th>
               <th>Bet</th>
               <th></th>
             </tr>
@@ -188,6 +192,7 @@
       <div class="modal-field">
         <label for="modalStake">Stake (units)</label>
         <input id="modalStake" type="number" step="0.01" min="0" />
+        <div id="kellyHint" class="kelly-hint" hidden></div>
       </div>
       <div class="modal-actions">
         <button id="modalCancel" class="btn btn-secondary" type="button">Cancel</button>

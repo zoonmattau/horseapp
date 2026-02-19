@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Daily Tips - HorseEdge AU</title>
+  <title>Dashboard - HorseEdge AU</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
@@ -11,20 +11,20 @@
 </head>
 <body>
   <nav class="topbar" aria-label="Main navigation">
-    <a href="/" class="topbar-brand">
+    <a href="/dashboard" class="topbar-brand">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
       HorseEdge
     </a>
     <div class="topbar-links">
-      <a href="/dashboard" class="topbar-link">
+      <a href="/dashboard" class="topbar-link active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Dashboard
       </a>
       <a href="/" class="topbar-link">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         Race Board
       </a>
-      <a href="/tips" class="topbar-link active">
+      <a href="/tips" class="topbar-link">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg>
         Daily Tips
       </a>
@@ -41,16 +41,19 @@
         Settings
       </a>
     </div>
-    <span class="topbar-context">Daily Tips <span id="tipCountBadge" class="badge badge-muted" style="margin-left:6px">0</span></span>
   </nav>
 
   <nav class="bottom-tabs" aria-label="Mobile navigation">
     <div class="bottom-tabs-inner">
-      <a href="/dashboard" class="bottom-tab">
+      <a href="/dashboard" class="bottom-tab active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Home
       </a>
-      <a href="/tips" class="bottom-tab active">
+      <a href="/" class="bottom-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        Board
+      </a>
+      <a href="/tips" class="bottom-tab">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg>
         Tips
       </a>
@@ -62,67 +65,74 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         Stats
       </a>
-      <a href="/settings" class="bottom-tab">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-        Settings
-      </a>
     </div>
   </nav>
 
-  <main class="page page-tips">
-    <section class="card">
-      <div class="controls-toolbar">
-        <label for="raceDate">Date
-          <input id="raceDate" type="date" />
-        </label>
-        <label for="minEdge">Min Edge %
-          <input id="minEdge" type="number" value="1" step="0.1" style="width:80px" />
-        </label>
-        <div id="books" class="book-toggles"></div>
-        <button id="refreshTips" class="btn btn-primary">Refresh</button>
-      </div>
-    </section>
+  <main class="page" style="gap:var(--sp-5)">
 
-    <section class="card">
-      <div class="panel-head">
-        <h2>Today's Tips</h2>
-        <button id="timeSortHeader" class="btn btn-ghost btn-sm" style="cursor:pointer">Jump Time ▲</button>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:var(--sp-3)">
+      <div>
+        <h1 style="margin:0;font-size:var(--text-xl)">Good <span id="timeOfDay">day</span></h1>
+        <div id="todayDate" class="muted" style="margin-top:2px"></div>
       </div>
-      <div id="tipsLoading" class="skeleton-table" hidden>
-        <div class="skeleton skeleton-row"></div>
-        <div class="skeleton skeleton-row"></div>
-        <div class="skeleton skeleton-row"></div>
-        <div class="skeleton skeleton-row"></div>
-      </div>
-      <div id="tipsEmpty" class="empty-state" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg>
-        <p>No tips match your filters for this date.</p>
-      </div>
-      <div id="tipsContainer" style="display:flex;flex-direction:column;gap:var(--sp-5)"></div>
-    </section>
-  </main>
+      <span id="dashLastUpdated" class="last-updated"></span>
+    </div>
 
-  <div id="trackModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="trackModalTitle">
-    <div class="modal-card">
-      <h3 id="trackModalTitle">Add to Slip</h3>
-      <div id="trackModalMeta" class="modal-meta"></div>
-      <div class="modal-field">
-        <label for="modalOdds">Exact Odds</label>
-        <input id="modalOdds" type="number" step="0.01" min="1.01" />
+    <!-- KPIs -->
+    <div class="dashboard-kpis">
+      <div class="dashboard-kpi">
+        <div class="dashboard-kpi-label">Tips Today</div>
+        <div class="dashboard-kpi-value" id="kpiTipsCount">-</div>
+        <div class="dashboard-kpi-sub" id="kpiHighEdgeSub"></div>
       </div>
-      <div class="modal-field">
-        <label for="modalStake">Stake (units)</label>
-        <input id="modalStake" type="number" step="0.01" min="0" />
-        <div id="kellyHint" class="kelly-hint" hidden></div>
+      <div class="dashboard-kpi">
+        <div class="dashboard-kpi-label">Next Race</div>
+        <div class="dashboard-kpi-value" id="kpiNextRace">-</div>
+        <div class="dashboard-kpi-sub" id="kpiNextRaceSub"></div>
       </div>
-      <div class="modal-actions">
-        <button id="modalCancel" class="btn btn-secondary" type="button">Cancel</button>
-        <button id="modalSave" class="btn btn-primary">Save Bet</button>
+      <div class="dashboard-kpi">
+        <div class="dashboard-kpi-label">Today P&amp;L</div>
+        <div class="dashboard-kpi-value" id="kpiTodayPL">-</div>
+        <div class="dashboard-kpi-sub" id="kpiTodayPLSub"></div>
+      </div>
+      <div class="dashboard-kpi">
+        <div class="dashboard-kpi-label">Bets Tracked</div>
+        <div class="dashboard-kpi-value" id="kpiBetsTracked">-</div>
+        <div class="dashboard-kpi-sub" id="kpiBetsTrackedSub"></div>
       </div>
     </div>
-  </div>
+
+    <!-- Top tips today -->
+    <section class="card">
+      <div class="panel-head">
+        <h2>Top Tips Today</h2>
+        <a href="/tips" class="btn btn-ghost btn-sm">View all →</a>
+      </div>
+      <div id="dashTopTips" class="dashboard-top-tips"></div>
+    </section>
+
+    <!-- Next races -->
+    <section class="card">
+      <div class="panel-head">
+        <h2>Next to Jump</h2>
+        <a href="/" class="btn btn-ghost btn-sm">Race Board →</a>
+      </div>
+      <div id="dashNextRaces" class="dashboard-next-races"></div>
+    </section>
+
+    <!-- Recent bets spark -->
+    <section class="card">
+      <div class="panel-head">
+        <h2>Recent Outcomes</h2>
+        <a href="/my-bets" class="btn btn-ghost btn-sm">My Bets →</a>
+      </div>
+      <div id="dashRecentOutcomes" class="spark-wrap" style="margin-top:var(--sp-2)"></div>
+      <div id="dashRecentEmpty" class="muted" style="font-size:var(--text-sm);padding:var(--sp-3) 0" hidden>No settled bets yet.</div>
+    </section>
+
+  </main>
 
   <div id="toastContainer" class="toast-container"></div>
-  <script src="/static/tips.js?v=20260219a"></script>
+  <script src="/static/dashboard.js?v=20260219a"></script>
 </body>
 </html>

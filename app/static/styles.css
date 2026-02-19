@@ -523,6 +523,18 @@ button:hover,
   border: 1px solid var(--line);
 }
 
+.badge-ok {
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+}
+
+.badge-warn {
+  background: color-mix(in srgb, var(--warn) 15%, transparent);
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+}
+
 /* ============================================================
    Input / Select
    ============================================================ */
@@ -650,6 +662,44 @@ tr.details-row td {
 /* ============================================================
    Filter Panel (collapsible)
    ============================================================ */
+#betLogDetails {
+  width: 100%;
+}
+
+#betLogDetails > summary.bet-log-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0 var(--sp-3);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+#betLogDetails > summary.bet-log-summary::-webkit-details-marker { display: none; }
+
+.bet-log-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  flex: 1;
+}
+
+.bet-log-title::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 18 15 12 9 6'%3E%3C/polyline%3E%3C/svg%3E") no-repeat center;
+  transition: transform var(--duration-fast) var(--ease);
+  vertical-align: middle;
+  margin-right: var(--sp-2);
+}
+
+#betLogDetails[open] > summary.bet-log-summary .bet-log-title::before {
+  transform: rotate(90deg);
+  display: inline-block;
+}
+
 .filter-panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -691,6 +741,53 @@ tr.details-row td {
   gap: var(--sp-3);
 }
 
+.filter-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: flex-start;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.filter-group-search {
+  flex: 1;
+  min-width: 180px;
+}
+
+.filter-group-search input {
+  width: 100%;
+}
+
+.filter-group-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.filter-range-pair {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.filter-range-pair input {
+  width: 80px;
+}
+
+.filter-range-sep {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  flex-shrink: 0;
+}
+
+/* keep old filter-field/grid for other pages that still use them */
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -719,6 +816,27 @@ tr.details-row td {
 
 .filter-field-wide {
   grid-column: span 2;
+}
+
+.filter-row-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3) var(--sp-4);
+  align-items: flex-end;
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--sp-1);
+}
+
+.filter-row-top label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .filter-actions {
@@ -1972,6 +2090,427 @@ summary {
 }
 
 /* ============================================================
+   Race Status (matrix buttons)
+   ============================================================ */
+.matrix-btn.race-imminent {
+  border-color: var(--amber) !important;
+  box-shadow: inset 0 0 0 1px var(--amber);
+}
+
+.matrix-btn.race-imminent .matrix-time {
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.matrix-btn.race-live {
+  border-color: var(--ok) !important;
+  animation: live-pulse 2s ease infinite;
+}
+
+.matrix-btn.race-live .matrix-time {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.matrix-btn.race-jumped {
+  opacity: 0.45;
+}
+
+.matrix-btn.race-jumped .matrix-time {
+  color: var(--muted);
+}
+
+@keyframes live-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px var(--ok), 0 0 6px rgba(22,163,74,0.2); }
+  50%       { box-shadow: 0 0 0 2px var(--ok), 0 0 12px rgba(22,163,74,0.45); }
+}
+
+/* Race status badge (used in tips cards and board header) */
+.race-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.race-status-badge.status-upcoming  { background: var(--surface-alt); color: var(--muted); border: 1px solid var(--line); }
+.race-status-badge.status-imminent  { background: rgba(217,119,6,0.12); color: var(--amber); border: 1px solid var(--amber); }
+.race-status-badge.status-live      { background: var(--ok-light); color: var(--ok); border: 1px solid var(--ok); }
+.race-status-badge.status-jumped    { background: var(--surface-alt); color: var(--muted); border: 1px solid var(--line); }
+
+/* ============================================================
+   Last Updated Indicator
+   ============================================================ */
+.last-updated {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-family: var(--mono);
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+/* ============================================================
+   Kelly Hint (bet modal)
+   ============================================================ */
+.kelly-hint {
+  margin-top: var(--sp-1);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.kelly-hint .kelly-value {
+  color: var(--brand);
+  font-weight: 700;
+  font-family: var(--mono);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ============================================================
+   Tips Cards Layout
+   ============================================================ */
+.tips-race-group {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.tips-race-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-1);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.tips-race-title {
+  font-weight: 700;
+  font-size: var(--text-md);
+}
+
+.tips-race-meta {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.tips-race-countdown {
+  font-family: var(--mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink);
+  margin-left: auto;
+}
+
+.tips-cards-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--sp-3);
+}
+
+.tip-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  padding: var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--duration-fast) var(--ease);
+}
+
+.tip-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.tip-card.tip-edge-strong {
+  border-left: 3px solid var(--ok);
+}
+
+.tip-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.tip-horse-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tip-horse-name {
+  font-weight: 700;
+  font-size: var(--text-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tip-horse-sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.tip-edge-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  font-family: var(--mono);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tip-edge-badge.edge-positive { background: var(--ok-light); color: var(--ok); border: 1px solid var(--ok); }
+.tip-edge-badge.edge-negative { background: var(--warn-light); color: var(--warn); border: 1px solid var(--warn); }
+.tip-edge-badge.edge-neutral  { background: var(--surface-alt); color: var(--muted); border: 1px solid var(--line); }
+
+.tip-card-people {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.tip-card-people span { display: flex; align-items: center; gap: 4px; }
+
+.tip-card-odds {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.tip-odds-block {
+  display: grid;
+  gap: 1px;
+}
+
+.tip-odds-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.tip-odds-value {
+  font-family: var(--mono);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tip-book-tag {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+.tip-odds-model {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.tip-edge-pos {
+  color: var(--ok);
+}
+
+.tip-edge-neg {
+  color: var(--warn);
+}
+
+.tip-card-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.tip-card-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+
+/* ============================================================
+   P&L SVG Chart
+   ============================================================ */
+.pl-chart-wrap {
+  width: 100%;
+  border-radius: var(--radius-md);
+}
+
+.pl-chart-wrap svg {
+  width: 100%;
+  display: block;
+}
+
+.pl-tooltip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 20;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--sp-2) var(--sp-3);
+  min-width: 170px;
+  font-size: var(--text-xs);
+}
+
+.pl-tt-label {
+  font-weight: 700;
+  font-size: var(--text-sm);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pl-tt-meta {
+  color: var(--muted);
+  margin-bottom: var(--sp-2);
+}
+
+.pl-tt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 2px 0;
+}
+
+.pl-tt-hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: var(--sp-1) 0;
+}
+
+.pl-tt-total {
+  font-weight: 600;
+}
+
+.pl-tt-win { color: var(--ok); }
+.pl-tt-loss { color: var(--warn); }
+
+.pl-chart-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  margin-top: var(--sp-3);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.pl-stat strong {
+  color: var(--text);
+}
+
+.pl-stat-sig {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.pl-stat-marginal {
+  color: var(--warn);
+}
+
+.pl-stat-ns {
+  color: var(--muted);
+}
+
+/* ============================================================
+   Dashboard
+   ============================================================ */
+.dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+
+.dashboard-kpi {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4);
+  display: grid;
+  gap: var(--sp-1);
+  box-shadow: var(--shadow-sm);
+}
+
+.dashboard-kpi-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.dashboard-kpi-value {
+  font-family: var(--mono);
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.dashboard-kpi-sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.dashboard-next-races {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.next-race-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.next-race-track {
+  font-weight: 700;
+  font-size: var(--text-sm);
+  min-width: 80px;
+}
+
+.next-race-details {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  flex: 1;
+}
+
+.next-race-countdown {
+  font-family: var(--mono);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.dashboard-top-tips {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+/* ============================================================
    Responsive (Mobile < 768px)
    ============================================================ */
 @media (max-width: 768px) {
@@ -2057,6 +2596,10 @@ summary {
 
   /* Touch-friendly buttons */
   button, .button, .btn { min-height: 44px; }
+
+  /* Tips cards */
+  .tips-cards-row { grid-template-columns: 1fr; }
+  .dashboard-kpis { grid-template-columns: 1fr 1fr; }
 
   /* Bets log */
   .bets-log-actions { width: 100%; }

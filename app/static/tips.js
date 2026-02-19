@@ -1,8 +1,7 @@
 const raceDateInput = document.getElementById("raceDate");
 const minEdgeInput = document.getElementById("minEdge");
 const booksContainer = document.getElementById("books");
-const tipsBody = document.querySelector("#tipsTable tbody");
-const tipsTable = document.getElementById("tipsTable");
+const tipsContainer = document.getElementById("tipsContainer");
 const tipsLoading = document.getElementById("tipsLoading");
 const tipsEmpty = document.getElementById("tipsEmpty");
 const tipCountBadge = document.getElementById("tipCountBadge");
@@ -79,11 +78,85 @@ function formatOdds(decimalOdds) {
   return `$${decimalOdds.toFixed(2)}`;
 }
 
+function formatCountdown(iso) {
+  if (!iso) return "-";
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff < -180000) {
+    const abs = Math.abs(diff);
+    const mins = Math.floor(abs / 60000);
+    const hh = Math.floor(mins / 60);
+    const mm = mins % 60;
+    return hh > 0 ? `${hh}h ${mm}m ago` : `${mm}m ago`;
+  }
+  if (diff < 0) return "Jumping";
+  const totalSec = Math.floor(diff / 1000);
+  if (totalSec < 300) {
+    const mm = Math.floor(totalSec / 60);
+    const ss = String(totalSec % 60).padStart(2, "0");
+    return mm > 0 ? `${mm}m ${ss}s` : `${ss}s`;
+  }
+  const mins = Math.floor(diff / 60000);
+  const hh = Math.floor(mins / 60);
+  const mm = mins % 60;
+  return hh > 0 ? `${hh}h ${mm}m` : `${mm}m`;
+}
+
+function raceStatusClass(iso) {
+  if (!iso) return "status-upcoming";
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff < -180000) return "status-jumped";
+  if (diff < 60000)   return "status-live";
+  if (diff < 300000)  return "status-imminent";
+  return "status-upcoming";
+}
+
+function computeKelly(edgePct, decimalOdds) {
+  const bankroll = Number(localStorage.getItem("horse_bankroll_units") || "100");
+  const b = decimalOdds - 1;
+  if (b <= 0 || edgePct == null) return null;
+  const p = (1 / decimalOdds) * (1 + edgePct / 100);
+  const q = 1 - p;
+  const kelly = (b * p - q) / b;
+  if (kelly <= 0) return null;
+  return ((kelly * 0.5) * bankroll).toFixed(2);
+}
+
+function tickTipsCountdowns() {
+  document.querySelectorAll("[data-jump-iso]").forEach((el) => {
+    const iso = el.getAttribute("data-jump-iso");
+    const cdEl = el.querySelector("[data-countdown]");
+    const badgeEl = el.querySelector(".race-status-badge");
+    const status = raceStatusClass(iso);
+    if (cdEl) cdEl.textContent = formatCountdown(iso);
+    if (badgeEl) {
+      badgeEl.className = `race-status-badge ${status}`;
+      const labels = { "status-upcoming": "Upcoming", "status-imminent": "Imminent", "status-live": "Live", "status-jumped": "Jumped" };
+      badgeEl.textContent = labels[status] || "Upcoming";
+    }
+  });
+}
+
 function openTrackModal(payload) {
   pendingTrackPayload = payload;
   trackModalMeta.textContent = `${payload.track} R${payload.race_number} - ${payload.horse_name}`;
-  modalOddsInput.value = Number(payload.odds_at_tip).toFixed(2);
+  const odds = Number(payload.odds_at_tip);
+  modalOddsInput.value = odds.toFixed(2);
   modalStakeInput.value = "1.00";
+
+  const kellyHint = document.getElementById("kellyHint");
+  if (kellyHint) {
+    const k = computeKelly(payload.edge_pct, odds);
+    if (k && Number(k) > 0) {
+      kellyHint.hidden = false;
+      kellyHint.innerHTML = `½ Kelly: <span class="kelly-value" id="kellyApply">${k}u</span>`;
+      document.getElementById("kellyApply")?.addEventListener("click", () => {
+        modalStakeInput.value = k;
+      });
+    } else {
+      kellyHint.hidden = true;
+    }
+  }
+
   trackModal.classList.remove("hidden");
 }
 
@@ -150,9 +223,36 @@ function renderBookmakers() {
 function setLoadingState(loading) {
   if (tipsLoading) tipsLoading.hidden = !loading;
   if (loading) {
-    tipsTable.style.display = "none";
+    if (tipsContainer) tipsContainer.style.display = "none";
     if (tipsEmpty) tipsEmpty.hidden = true;
   }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatFormString(form) {
+  if (!form || form === "-") return "-";
+  const last = form.length - 1;
+  let html = "";
+  for (let i = 0; i < form.length; i++) {
+    const ch = form[i];
+    if (i === last && ch === "1") html += `<span class="form-first-win">${ch}</span>`;
+    else if (i === last && parseInt(ch) >= 4) html += `<span class="form-first-bad">${ch}</span>`;
+    else html += ch;
+  }
+  return html;
+}
+
+function gradeHtml(roi) {
+  if (roi == null || roi <= 0) return "";
+  return `<span class="stars" title="ROI: ${roi}%"><span class="star-filled">★</span></span>`;
 }
 
 async function loadDailyTips() {
@@ -176,70 +276,108 @@ async function loadDailyTips() {
     tipCountBadge.className = tips.length > 0 ? "badge badge-brand" : "badge badge-muted";
   }
 
-  timeSortHeader.textContent = `Jump Time ${timeSortAsc ? "\u25B2" : "\u25BC"}`;
-  tipsBody.innerHTML = "";
+  if (timeSortHeader) timeSortHeader.textContent = `Jump Time ${timeSortAsc ? "▲" : "▼"}`;
+
+  if (!tipsContainer) return;
+  tipsContainer.innerHTML = "";
 
   if (!tips.length) {
-    tipsTable.style.display = "none";
+    tipsContainer.style.display = "none";
     if (tipsEmpty) tipsEmpty.hidden = false;
     return;
   }
 
-  tipsTable.style.display = "";
+  tipsContainer.style.display = "flex";
   if (tipsEmpty) tipsEmpty.hidden = true;
 
   notifyHighEdgeTips(tips);
 
+  // Group tips by race
+  const raceGroups = new Map();
   tips.forEach((tip) => {
-    const edgeCls = Number(tip.edge_pct) > 0
-      ? "edge-positive"
-      : Number(tip.edge_pct) < 0
-        ? "edge-negative"
-        : "edge-neutral";
-    const form = tip.form_last5 || "-";
-    let formHtml = "";
-    const lastIdx = form.length - 1;
-    for (let i = 0; i < form.length; i++) {
-      const ch = form[i];
-      if (i === lastIdx && ch === "1") formHtml += `<span class="form-first-win">${ch}</span>`;
-      else if (i === lastIdx && parseInt(ch) >= 4) formHtml += `<span class="form-first-bad">${ch}</span>`;
-      else formHtml += ch;
-    }
-    if (!form || form === "-") formHtml = "-";
-    function tipGrade(roi) {
-      if (roi == null || roi <= 0) return "";
-      return `<span class="stars" title="ROI: ${roi}%"><span class="star-filled">\u2605</span></span>`;
-    }
-    const tr = document.createElement("tr");
-    if (Number(tip.edge_pct) > 5) tr.className = "row-value-strong";
-    tr.innerHTML = `
-      <td>${tip.track}</td>
-      <td>R${tip.race_number}</td>
-      <td>${tip.jump_time || "-"}</td>
-      <td>${tip.horse_number}</td>
-      <td>${tip.horse_name}</td>
-      <td><span class="form-string">${formHtml}</span></td>
-      <td>${tip.trainer}${tipGrade(tip.trainer_roi_pct)}</td>
-      <td>${tip.jockey}${tipGrade(tip.jockey_roi_pct)}</td>
-      <td>${formatOdds(Number(tip.market_odds))}</td>
-      <td>${tip.best_book_symbol}</td>
-      <td class="${edgeCls}">${Number(tip.edge_pct).toFixed(2)}%</td>
-      <td><a href="${tip.bet_url}" target="_blank" rel="noreferrer">Bet</a></td>
-      <td><button data-track-bet="1">+ Slip</button></td>
+    const key = `${tip.track}|${tip.race_number}|${tip.jump_time}`;
+    if (!raceGroups.has(key)) raceGroups.set(key, { track: tip.track, race_number: tip.race_number, jump_time: tip.jump_time, distance_m: tip.distance_m, tips: [] });
+    raceGroups.get(key).tips.push(tip);
+  });
+
+  raceGroups.forEach((group) => {
+    const jumpIso = group.jump_time ? `${raceDateInput.value || todayIso()}T${group.jump_time}:00` : null;
+    const status = jumpIso ? raceStatusClass(jumpIso) : "status-upcoming";
+    const statusLabels = { "status-upcoming": "Upcoming", "status-imminent": "Imminent", "status-live": "Live", "status-jumped": "Jumped" };
+
+    const groupEl = document.createElement("div");
+    groupEl.className = "tips-race-group";
+
+    const headerEl = document.createElement("div");
+    headerEl.className = "tips-race-header";
+    if (jumpIso) headerEl.setAttribute("data-jump-iso", jumpIso);
+    headerEl.innerHTML = `
+      <span class="tips-race-title">${escapeHtml(group.track)} R${group.race_number}</span>
+      ${group.distance_m ? `<span class="tips-race-meta">${group.distance_m}m</span>` : ""}
+      <span class="tips-race-countdown" data-countdown="1">${jumpIso ? formatCountdown(jumpIso) : (group.jump_time || "-")}</span>
+      <span class="race-status-badge ${status}">${statusLabels[status] || "Upcoming"}</span>
     `;
-    tr.querySelector("button[data-track-bet='1']").addEventListener("click", () => {
-      openTrackModal({
-        race_id: tip.race_id,
-        runner_id: tip.runner_id,
-        bookmaker: tip.best_bookmaker,
-        edge_pct: tip.edge_pct,
-        odds_at_tip: tip.market_odds,
-        horse_name: tip.horse_name,
-        track: tip.track,
-        race_number: tip.race_number,
+    groupEl.appendChild(headerEl);
+
+    const cardsRow = document.createElement("div");
+    cardsRow.className = "tips-cards-row";
+
+    group.tips.forEach((tip) => {
+      const edgePct = Number(tip.edge_pct);
+      const edgeCls = edgePct > 0 ? "edge-positive" : edgePct < 0 ? "edge-negative" : "edge-neutral";
+      const isStrong = edgePct > 5;
+
+      const card = document.createElement("div");
+      card.className = `tip-card${isStrong ? " tip-edge-strong" : ""}`;
+      card.innerHTML = `
+        <div class="tip-card-top">
+          <div class="tip-horse-info">
+            <div class="tip-horse-name">#${tip.horse_number} ${escapeHtml(tip.horse_name)}</div>
+            <div class="tip-horse-sub form-string">${formatFormString(tip.form_last5 || "-")}</div>
+          </div>
+        </div>
+        <div class="tip-card-people">
+          <span>J: ${escapeHtml(tip.jockey)}${gradeHtml(tip.jockey_roi_pct)}</span>
+          <span>T: ${escapeHtml(tip.trainer)}${gradeHtml(tip.trainer_roi_pct)}</span>
+        </div>
+        <div class="tip-card-odds">
+          <div class="tip-odds-block">
+            <div class="tip-odds-label">Best Price</div>
+            <div class="tip-odds-value">${formatOdds(Number(tip.market_odds))} <span class="tip-book-tag">${escapeHtml(tip.best_book_symbol || "")}</span></div>
+          </div>
+          <div class="tip-odds-block">
+            <div class="tip-odds-label">Model Est.</div>
+            <div class="tip-odds-value tip-odds-model">${formatOdds(Number(tip.predicted_price))}</div>
+          </div>
+          <div class="tip-odds-block">
+            <div class="tip-odds-label">Edge</div>
+            <div class="tip-odds-value ${edgePct > 0 ? "tip-edge-pos" : "tip-edge-neg"}">${edgePct > 0 ? "+" : ""}${edgePct.toFixed(1)}%</div>
+          </div>
+        </div>
+        <div class="tip-card-actions">
+          <a href="${escapeHtml(tip.bet_url)}" target="_blank" rel="noreferrer" class="btn btn-sm btn-ghost">Bet →</a>
+          <button class="btn btn-sm btn-primary" data-track-bet="1">+ Slip</button>
+        </div>
+      `;
+
+      card.querySelector("button[data-track-bet='1']").addEventListener("click", () => {
+        openTrackModal({
+          race_id: tip.race_id,
+          runner_id: tip.runner_id,
+          bookmaker: tip.best_bookmaker,
+          edge_pct: tip.edge_pct,
+          odds_at_tip: tip.market_odds,
+          horse_name: tip.horse_name,
+          track: tip.track,
+          race_number: tip.race_number,
+        });
       });
+
+      cardsRow.appendChild(card);
     });
-    tipsBody.appendChild(tr);
+
+    groupEl.appendChild(cardsRow);
+    tipsContainer.appendChild(groupEl);
   });
 }
 
@@ -253,7 +391,7 @@ refreshTipsBtn.addEventListener("click", () => {
   });
 });
 
-timeSortHeader.addEventListener("click", async () => {
+timeSortHeader?.addEventListener("click", async () => {
   timeSortAsc = !timeSortAsc;
   await loadDailyTips();
 });
@@ -316,6 +454,10 @@ async function init() {
   if (savedMinEdge) minEdgeInput.value = savedMinEdge;
   await loadBookmakers();
   await loadDailyTips();
+  setInterval(() => {
+    loadDailyTips().catch(console.error);
+  }, 60000);
+  setInterval(tickTipsCountdowns, 1000);
 }
 
 init().catch((err) => {

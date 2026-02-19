@@ -2,7 +2,7 @@ const betsBody = document.querySelector("#betsTable tbody");
 const betsTable = document.getElementById("betsTable");
 const betsLoading = document.getElementById("betsLoading");
 const analyticsPanel = document.getElementById("analyticsPanel");
-const toggleAnalyticsBtn = document.getElementById("toggleAnalytics");
+const plChartWrap = document.getElementById("plChartWrap");
 const rangeFilter = document.getElementById("rangeFilter");
 const betsTrackFilter = document.getElementById("betsTrackFilter");
 const betsBookFilter = document.getElementById("betsBookFilter");
@@ -17,6 +17,8 @@ const betsMaxBarrierFilter = document.getElementById("betsMaxBarrierFilter");
 const betsMinDistanceFilter = document.getElementById("betsMinDistanceFilter");
 const betsMaxDistanceFilter = document.getElementById("betsMaxDistanceFilter");
 const betsSearchFilter = document.getElementById("betsSearchFilter");
+const betsJockeyFilter = document.getElementById("betsJockeyFilter");
+const betsTrainerFilter = document.getElementById("betsTrainerFilter");
 const clearBetsFiltersBtn = document.getElementById("clearBetsFilters");
 const betsFilterSummary = document.getElementById("betsFilterSummary");
 const betsFilterPills = document.getElementById("betsFilterPills");
@@ -43,6 +45,7 @@ let currentBets = [];
 let currentFilteredBets = [];
 let marketAnalytics = null;
 let pendingEditBet = null;
+let plPeriodDays = null;
 const settlePendingBtn = document.getElementById("settlePending");
 let betsFilterTimer = null;
 
@@ -80,6 +83,14 @@ function saveFilter(page, field, value) {
 
 function loadFilter(page, field, fallback) {
   return localStorage.getItem(`horse_filter_${page}_${field}`) ?? fallback;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function formatOdds(decimalOdds) {
@@ -120,19 +131,27 @@ if (analyticsTabs) {
 function renderBetsFilterMeta() {
   const pills = [];
   if ((rangeFilter?.value || "all") !== "all") pills.push(`Range: ${rangeFilter.value}`);
-  if ((betsTrackFilter?.value || "all") !== "all") pills.push(`Track: ${betsTrackFilter.value}`);
+  const selTracks = [...(betsTrackFilter?.selectedOptions || [])].map((o) => o.value);
+  if (selTracks.length) pills.push(`Track: ${selTracks.join(", ")}`);
   if ((betsBookFilter?.value || "all") !== "all") pills.push(`Book: ${betsBookFilter.value}`);
   if ((betsResultFilter?.value || "all") !== "all") pills.push(`Result: ${betsResultFilter.value}`);
   if (betsMinEdgeFilter?.value?.trim()) pills.push(`Edge >= ${betsMinEdgeFilter.value.trim()}%`);
   if (betsMinOddsFilter?.value?.trim()) pills.push(`Odds >= ${betsMinOddsFilter.value.trim()}`);
   if (betsMaxOddsFilter?.value?.trim()) pills.push(`Odds <= ${betsMaxOddsFilter.value.trim()}`);
-  if (betsMinBackNumberFilter?.value?.trim()) pills.push(`Back >= ${betsMinBackNumberFilter.value.trim()}`);
-  if (betsMaxBackNumberFilter?.value?.trim()) pills.push(`Back <= ${betsMaxBackNumberFilter.value.trim()}`);
+  const backVal = betsMinBackNumberFilter?.value?.trim();
+  if (backVal) {
+    const backLabels = { "1": "1st up", "2": "2nd up", "3": "3rd up", "4": "4th up", "5": "5th up+" };
+    pills.push(backLabels[backVal] || `Back #${backVal}`);
+  }
   if (betsMinBarrierFilter?.value?.trim()) pills.push(`Barrier >= ${betsMinBarrierFilter.value.trim()}`);
   if (betsMaxBarrierFilter?.value?.trim()) pills.push(`Barrier <= ${betsMaxBarrierFilter.value.trim()}`);
   if (betsMinDistanceFilter?.value?.trim()) pills.push(`Distance >= ${betsMinDistanceFilter.value.trim()}m`);
   if (betsMaxDistanceFilter?.value?.trim()) pills.push(`Distance <= ${betsMaxDistanceFilter.value.trim()}m`);
   if (betsSearchFilter?.value?.trim()) pills.push(`Search: "${betsSearchFilter.value.trim()}"`);
+  const selJockeys = [...(betsJockeyFilter?.selectedOptions || [])].map((o) => o.value);
+  if (selJockeys.length) pills.push(`Jockey: ${selJockeys.join(", ")}`);
+  const selTrainers = [...(betsTrainerFilter?.selectedOptions || [])].map((o) => o.value);
+  if (selTrainers.length) pills.push(`Trainer: ${selTrainers.join(", ")}`);
 
   if (betsFilterSummary) {
     betsFilterSummary.textContent = pills.length ? `${pills.length} active filter${pills.length > 1 ? "s" : ""}` : "No active filters";
@@ -184,14 +203,15 @@ function filterBetsByRange(bets, range) {
 }
 
 function filterBetsAdvanced(bets) {
-  const track = (betsTrackFilter?.value || "all").toLowerCase();
+  const selTracksFilter = [...(betsTrackFilter?.selectedOptions || [])].map((o) => o.value);
   const book = (betsBookFilter?.value || "all").toLowerCase();
   const result = betsResultFilter?.value || "all";
   const minEdgeRaw = betsMinEdgeFilter?.value?.trim() || "";
   const minOddsRaw = betsMinOddsFilter?.value?.trim() || "";
   const maxOddsRaw = betsMaxOddsFilter?.value?.trim() || "";
   const minBackRaw = betsMinBackNumberFilter?.value?.trim() || "";
-  const maxBackRaw = betsMaxBackNumberFilter?.value?.trim() || "";
+  // "5" in dropdown means 5th up+ (no upper bound); exact match for 1-4
+  const maxBackRaw = minBackRaw === "5" ? "" : minBackRaw;
   const minBarrierRaw = betsMinBarrierFilter?.value?.trim() || "";
   const maxBarrierRaw = betsMaxBarrierFilter?.value?.trim() || "";
   const minDistanceRaw = betsMinDistanceFilter?.value?.trim() || "";
@@ -202,14 +222,14 @@ function filterBetsAdvanced(bets) {
   const minOdds = minOddsRaw === "" ? null : Number(minOddsRaw);
   const maxOdds = maxOddsRaw === "" ? null : Number(maxOddsRaw);
   const minBack = minBackRaw === "" ? null : Number(minBackRaw);
-  const maxBack = maxBackRaw === "" ? null : Number(maxBackRaw);
+  const maxBack = maxBackRaw === "" ? null : Number(minBackRaw); // exact match for 1-4, open-ended for 5+
   const minBarrier = minBarrierRaw === "" ? null : Number(minBarrierRaw);
   const maxBarrier = maxBarrierRaw === "" ? null : Number(maxBarrierRaw);
   const minDistance = minDistanceRaw === "" ? null : Number(minDistanceRaw);
   const maxDistance = maxDistanceRaw === "" ? null : Number(maxDistanceRaw);
 
   return bets.filter((b) => {
-    if (track !== "all" && String(b.track || "").toLowerCase() !== track) return false;
+    if (selTracksFilter.length && !selTracksFilter.includes(String(b.track || "").trim())) return false;
     if (book !== "all" && String(b.bookmaker || "").toLowerCase() !== book) return false;
     if (result === "settled" && (b.result !== "won" && b.result !== "lost")) return false;
     if (result !== "all" && result !== "settled" && b.result !== result) return false;
@@ -231,24 +251,19 @@ function filterBetsAdvanced(bets) {
       const hay = `${b.horse_name || ""} ${b.track || ""} ${b.bookmaker || ""}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
+    const selJockeys = [...(betsJockeyFilter?.selectedOptions || [])].map((o) => o.value);
+    if (selJockeys.length && !selJockeys.includes(String(b.jockey || "").trim())) return false;
+    const selTrainers = [...(betsTrainerFilter?.selectedOptions || [])].map((o) => o.value);
+    if (selTrainers.length && !selTrainers.includes(String(b.trainer || "").trim())) return false;
     return true;
   });
 }
 
 function populateBetFilterSelects(bets) {
-  if (!betsTrackFilter || !betsBookFilter) return;
+  if (!betsBookFilter) return;
   const uniqueTracks = Array.from(new Set(bets.map((b) => String(b.track || "").trim()).filter(Boolean))).sort();
   const uniqueBooks = Array.from(new Set(bets.map((b) => String(b.bookmaker || "").trim()).filter(Boolean))).sort();
-  const selectedTrack = betsTrackFilter.value || "all";
   const selectedBook = betsBookFilter.value || "all";
-
-  betsTrackFilter.innerHTML = '<option value="all">All Tracks</option>';
-  uniqueTracks.forEach((t) => {
-    const opt = document.createElement("option");
-    opt.value = t;
-    opt.textContent = t;
-    betsTrackFilter.appendChild(opt);
-  });
 
   betsBookFilter.innerHTML = '<option value="all">All Books</option>';
   uniqueBooks.forEach((b) => {
@@ -258,8 +273,28 @@ function populateBetFilterSelects(bets) {
     betsBookFilter.appendChild(opt);
   });
 
-  if ([...betsTrackFilter.options].some((o) => o.value === selectedTrack)) betsTrackFilter.value = selectedTrack;
   if ([...betsBookFilter.options].some((o) => o.value === selectedBook)) betsBookFilter.value = selectedBook;
+
+  const populateMulti = (el, values, prevSelected) => {
+    if (!el) return;
+    el.innerHTML = "";
+    values.forEach((v) => {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      if (prevSelected.has(v)) opt.selected = true;
+      el.appendChild(opt);
+    });
+  };
+
+  const prevTracks = new Set([...betsTrackFilter?.selectedOptions || []].map((o) => o.value));
+  const prevJockeys = new Set([...betsJockeyFilter?.selectedOptions || []].map((o) => o.value));
+  const prevTrainers = new Set([...betsTrainerFilter?.selectedOptions || []].map((o) => o.value));
+  populateMulti(betsTrackFilter, uniqueTracks, prevTracks);
+  const uniqueJockeys = Array.from(new Set(bets.map((b) => String(b.jockey || "").trim()).filter(Boolean))).sort();
+  const uniqueTrainers = Array.from(new Set(bets.map((b) => String(b.trainer || "").trim()).filter(Boolean))).sort();
+  populateMulti(betsJockeyFilter, uniqueJockeys, prevJockeys);
+  populateMulti(betsTrainerFilter, uniqueTrainers, prevTrainers);
 }
 
 function impliedStake(b) {
@@ -647,20 +682,19 @@ async function loadBets() {
   }
   currentBets = betsData.bets || [];
   if (betsLoading) betsLoading.hidden = true;
+  renderPLChart(currentBets);
   renderMarketAnalytics(analyticsData);
   populateBetFilterSelects(currentBets);
   restoreBetsFilters();
-  // Restore track/book after selects are populated
-  const savedTrack = loadFilter("bets", "track", "all");
+  // Restore book after selects are populated
   const savedBook = loadFilter("bets", "book", "all");
-  if (betsTrackFilter && [...betsTrackFilter.options].some((o) => o.value === savedTrack)) betsTrackFilter.value = savedTrack;
   if (betsBookFilter && [...betsBookFilter.options].some((o) => o.value === savedBook)) betsBookFilter.value = savedBook;
   applyFiltersAndRender();
 }
 
 function clearBetsFilters() {
   if (rangeFilter) rangeFilter.value = "all";
-  if (betsTrackFilter) betsTrackFilter.value = "all";
+  if (betsTrackFilter) [...betsTrackFilter.options].forEach((o) => { o.selected = false; });
   if (betsBookFilter) betsBookFilter.value = "all";
   if (betsResultFilter) betsResultFilter.value = "all";
   if (betsMinEdgeFilter) betsMinEdgeFilter.value = "";
@@ -673,6 +707,8 @@ function clearBetsFilters() {
   if (betsMinDistanceFilter) betsMinDistanceFilter.value = "";
   if (betsMaxDistanceFilter) betsMaxDistanceFilter.value = "";
   if (betsSearchFilter) betsSearchFilter.value = "";
+  if (betsJockeyFilter) [...betsJockeyFilter.options].forEach((o) => { o.selected = false; });
+  if (betsTrainerFilter) [...betsTrainerFilter.options].forEach((o) => { o.selected = false; });
   saveBetsFilters();
   applyFiltersAndRender();
 }
@@ -689,20 +725,222 @@ settlePendingBtn?.addEventListener("click", async () => {
   }
 });
 
-toggleAnalyticsBtn.addEventListener("click", () => {
-  const hidden = analyticsPanel.hasAttribute("hidden");
-  if (hidden) {
-    analyticsPanel.removeAttribute("hidden");
-    toggleAnalyticsBtn.textContent = "Hide Analytics";
-  } else {
-    analyticsPanel.setAttribute("hidden", "");
-    toggleAnalyticsBtn.textContent = "Show Analytics";
+function renderPLChart(bets) {
+  if (!plChartWrap) return;
+  let pool = bets;
+  if (plPeriodDays !== null) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - plPeriodDays);
+    pool = bets.filter((b) => new Date(b.tracked_at) >= cutoff);
   }
-});
+  const settled = pool
+    .filter((b) => b.result === "won" || b.result === "lost")
+    .sort((a, b) => new Date(a.tracked_at) - new Date(b.tracked_at));
+
+  if (!settled.length) {
+    plChartWrap.innerHTML = `<div class="empty-state" style="padding:var(--sp-5)"><p>No settled bets yet.</p></div>`;
+    return;
+  }
+
+  let cumulative = 0;
+  const points = [{ v: 0, bet: null, pl: 0 }];
+  settled.forEach((b) => {
+    const stake = Number(b.stake || 0);
+    const odds = Number(b.odds_at_tip || 0);
+    const pl = b.result === "won" ? stake * (odds - 1) : -stake;
+    cumulative += pl;
+    points.push({ v: cumulative, bet: b, pl });
+  });
+
+  const W = 800, H = 210, PL = 52, PR = 16, PT = 16, PB = 52;
+  const cW = W - PL - PR, cH = H - PT - PB;
+  const vals = points.map((p) => p.v);
+  const minY = Math.min(...vals, 0);
+  const maxY = Math.max(...vals, 0);
+  const rangeY = maxY - minY || 1;
+  const sx = (i) => PL + (i / Math.max(points.length - 1, 1)) * cW;
+  const sy = (v) => PT + (1 - (v - minY) / rangeY) * cH;
+  const zeroY = sy(0);
+  const finalColor = cumulative >= 0 ? "var(--ok)" : "var(--warn)";
+
+  const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"}${sx(i).toFixed(1)},${sy(p.v).toFixed(1)}`).join(" ");
+  const areaAbove = `M${sx(0)},${zeroY} ` + points.map((p, i) => `L${sx(i).toFixed(1)},${sy(Math.max(p.v, 0)).toFixed(1)}`).join(" ") + ` L${sx(points.length - 1)},${zeroY} Z`;
+  const areaBelow = `M${sx(0)},${zeroY} ` + points.map((p, i) => `L${sx(i).toFixed(1)},${sy(Math.min(p.v, 0)).toFixed(1)}`).join(" ") + ` L${sx(points.length - 1)},${zeroY} Z`;
+
+  // X-axis ticks — pick up to 8 evenly spaced
+  const maxTicks = Math.min(8, points.length - 1);
+  const step = Math.max(1, Math.ceil((points.length - 1) / maxTicks));
+  const tickIdxs = [];
+  for (let i = 0; i < points.length; i += step) tickIdxs.push(i);
+  if (tickIdxs[tickIdxs.length - 1] !== points.length - 1) tickIdxs.push(points.length - 1);
+
+  const xTicks = tickIdxs.map((i) => {
+    const x = sx(i).toFixed(1);
+    const p = points[i];
+    const label = i === 0 ? "Start" : new Date(p.bet.tracked_at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return `
+      <line x1="${x}" y1="${(H - PB).toFixed(1)}" x2="${x}" y2="${(H - PB + 5).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>
+      <text x="${x}" y="${(H - PB + 16).toFixed(1)}" text-anchor="middle" font-size="9" fill="var(--muted)">${label}</text>
+      <text x="${x}" y="${(H - PB + 28).toFixed(1)}" text-anchor="middle" font-size="9" fill="var(--muted)" opacity="0.5">#${i}</text>
+    `;
+  }).join("");
+
+  // Y-axis labels
+  const yLabels = [
+    `<text x="${(PL - 6).toFixed(1)}" y="${sy(maxY).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)" dominant-baseline="middle">${maxY.toFixed(1)}u</text>`,
+    `<text x="${(PL - 6).toFixed(1)}" y="${zeroY.toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)" dominant-baseline="middle">0</text>`,
+    minY < 0 ? `<text x="${(PL - 6).toFixed(1)}" y="${sy(minY).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)" dominant-baseline="middle">${minY.toFixed(1)}u</text>` : "",
+  ].join("");
+
+  // Dots — all hidden except last; shown on hover via JS
+  const dots = points.map((p, i) => {
+    const c = i === 0 ? "var(--muted)" : p.pl >= 0 ? "var(--ok)" : "var(--warn)";
+    return `<circle class="pl-dot" data-idx="${i}" cx="${sx(i).toFixed(1)}" cy="${sy(p.v).toFixed(1)}" r="3.5" fill="${c}" opacity="${i === points.length - 1 ? 1 : 0}"/>`;
+  }).join("");
+
+  // Crosshair vertical line (hidden by default)
+  const crosshair = `<line id="plCrosshair" x1="0" y1="${PT}" x2="0" y2="${H - PB}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 2" opacity="0"/>`;
+
+  plChartWrap.innerHTML = `
+    <div style="position:relative">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block">
+        <defs>
+          <linearGradient id="gradUp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--ok)" stop-opacity="0.22"/><stop offset="100%" stop-color="var(--ok)" stop-opacity="0"/></linearGradient>
+          <linearGradient id="gradDown" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="var(--warn)" stop-opacity="0.22"/><stop offset="100%" stop-color="var(--warn)" stop-opacity="0"/></linearGradient>
+        </defs>
+        <path d="${areaAbove}" fill="url(#gradUp)"/>
+        <path d="${areaBelow}" fill="url(#gradDown)"/>
+        <line x1="${PL}" y1="${zeroY.toFixed(1)}" x2="${W - PR}" y2="${zeroY.toFixed(1)}" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 3"/>
+        <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H - PB}" stroke="var(--line)" stroke-width="1"/>
+        <line x1="${PL}" y1="${H - PB}" x2="${W - PR}" y2="${H - PB}" stroke="var(--line)" stroke-width="1"/>
+        <path d="${pathD}" fill="none" stroke="${finalColor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        ${xTicks}${yLabels}${crosshair}${dots}
+      </svg>
+      <div id="plOverlay" style="position:absolute;inset:0;cursor:crosshair"></div>
+      <div id="plTooltip" class="pl-tooltip" style="display:none"></div>
+    </div>
+  `;
+
+  const badge = document.getElementById("plTotalBadge");
+  if (badge) {
+    const sign = cumulative >= 0 ? "+" : "";
+    badge.textContent = `${sign}${cumulative.toFixed(2)}u`;
+    badge.className = `badge ${cumulative >= 0 ? "badge-ok" : "badge-warn"}`;
+  }
+
+  // P-value: one-sided binomial test (normal approximation)
+  // H0: observed win rate = expected win rate implied by average odds
+  const statsEl = document.getElementById("plChartStats");
+  if (statsEl && settled.length > 0) {
+    const n = settled.length;
+    const wins = settled.filter((b) => b.result === "won").length;
+    const avgImpliedProb = settled.reduce((sum, b) => sum + 1 / Math.max(Number(b.odds_at_tip), 1.01), 0) / n;
+    const observedRate = wins / n;
+    const se = Math.sqrt(avgImpliedProb * (1 - avgImpliedProb) / n);
+    const z = se > 0 ? (observedRate - avgImpliedProb) / se : 0;
+    // Approximate one-sided p-value from z using complementary error function
+    const erfApprox = (x) => {
+      const t = 1 / (1 + 0.3275911 * Math.abs(x));
+      const y = 1 - (((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t) * Math.exp(-x * x);
+      return x < 0 ? -y : y;
+    };
+    const pValue = z <= 0 ? 1 : 0.5 * (1 - erfApprox(z / Math.sqrt(2)));
+    const pDisplay = pValue < 0.001 ? "<0.001" : pValue.toFixed(3);
+    const pClass = pValue < 0.05 ? "pl-stat-sig" : pValue < 0.1 ? "pl-stat-marginal" : "pl-stat-ns";
+    const roiPct = settled.reduce((s, b) => {
+      const stake = Number(b.stake || 0);
+      const pl = b.result === "won" ? stake * (Number(b.odds_at_tip) - 1) : -stake;
+      return s + pl;
+    }, 0) / settled.reduce((s, b) => s + Number(b.stake || 0), 0) * 100;
+
+    statsEl.innerHTML = `
+      <span class="pl-stat"><strong>${n}</strong> bets</span>
+      <span class="pl-stat"><strong>${wins}</strong> wins (${(observedRate * 100).toFixed(1)}% vs ${(avgImpliedProb * 100).toFixed(1)}% implied)</span>
+      <span class="pl-stat">ROI <strong>${roiPct >= 0 ? "+" : ""}${roiPct.toFixed(1)}%</strong></span>
+      <span class="pl-stat ${pClass}">p = ${pDisplay}${pValue < 0.05 ? " ✓" : ""}</span>
+    `;
+  } else if (statsEl) {
+    statsEl.innerHTML = "";
+  }
+
+  const tooltip = plChartWrap.querySelector("#plTooltip");
+  const overlay = plChartWrap.querySelector("#plOverlay");
+  const crosshairEl = plChartWrap.querySelector("#plCrosshair");
+  let lastIdx = -1;
+
+  overlay.addEventListener("mousemove", (e) => {
+    const rect = overlay.getBoundingClientRect();
+    // Map screen X to SVG viewBox X
+    const svgX = ((e.clientX - rect.left) / rect.width) * W;
+
+    // Find nearest point by X distance
+    let idx = 0, minDist = Infinity;
+    points.forEach((_, i) => {
+      const d = Math.abs(sx(i) - svgX);
+      if (d < minDist) { minDist = d; idx = i; }
+    });
+
+    // Move crosshair
+    if (crosshairEl) {
+      crosshairEl.setAttribute("x1", sx(idx).toFixed(1));
+      crosshairEl.setAttribute("x2", sx(idx).toFixed(1));
+      crosshairEl.setAttribute("opacity", "0.5");
+    }
+
+    // Update dots visibility
+    if (idx !== lastIdx) {
+      lastIdx = idx;
+      plChartWrap.querySelectorAll(".pl-dot").forEach((d) => {
+        const di = Number(d.dataset.idx);
+        d.setAttribute("opacity", di === idx || di === points.length - 1 ? "1" : "0");
+      });
+
+      const p = points[idx];
+      if (idx === 0) {
+        tooltip.innerHTML = `<div class="pl-tt-label">Start</div><div class="pl-tt-row"><span>Running P&L</span><strong>0.00u</strong></div>`;
+      } else {
+        const b = p.bet;
+        const won = b.result === "won";
+        const plSign = p.pl >= 0 ? "+" : "";
+        const cumSign = p.v >= 0 ? "+" : "";
+        const date = new Date(b.tracked_at).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+        tooltip.innerHTML = `
+          <div class="pl-tt-label">#${idx} · ${escapeHtml(b.horse_name || "")}</div>
+          <div class="pl-tt-meta">${escapeHtml(b.track || "")} R${b.race_number} · ${date}</div>
+          <div class="pl-tt-row"><span class="${won ? "pl-tt-win" : "pl-tt-loss"}">${won ? "✓ Won" : "✗ Lost"}</span><strong class="${won ? "pl-tt-win" : "pl-tt-loss"}">${plSign}${p.pl.toFixed(2)}u</strong></div>
+          <div class="pl-tt-row"><span>Odds</span><span>${formatOdds(Number(b.odds_at_tip))}</span></div>
+          <div class="pl-tt-row"><span>Stake</span><span>${Number(b.stake).toFixed(2)}u</span></div>
+          <hr class="pl-tt-hr"/>
+          <div class="pl-tt-row pl-tt-total"><span>Running P&L</span><strong class="${p.v >= 0 ? "pl-tt-win" : "pl-tt-loss"}">${cumSign}${p.v.toFixed(2)}u</strong></div>
+        `;
+      }
+    }
+
+    tooltip.style.display = "block";
+    const wrapRect = tooltip.parentElement.getBoundingClientRect();
+    const ttW = 195;
+    const ttH = tooltip.offsetHeight;
+    const mouseX = e.clientX - wrapRect.left;
+    const mouseY = e.clientY - wrapRect.top;
+    let left = mouseX + 14;
+    if (left + ttW > wrapRect.width - 8) left = mouseX - ttW - 14;
+    const top = mouseY + ttH + 12 > wrapRect.height ? mouseY - ttH - 8 : mouseY + 12;
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${Math.max(0, top)}px`;
+  });
+
+  overlay.addEventListener("mouseleave", () => {
+    tooltip.style.display = "none";
+    if (crosshairEl) crosshairEl.setAttribute("opacity", "0");
+    plChartWrap.querySelectorAll(".pl-dot").forEach((d) => {
+      d.setAttribute("opacity", Number(d.dataset.idx) === points.length - 1 ? "1" : "0");
+    });
+    lastIdx = -1;
+  });
+}
 
 function saveBetsFilters() {
   saveFilter("bets", "range", rangeFilter?.value || "all");
-  saveFilter("bets", "track", betsTrackFilter?.value || "all");
   saveFilter("bets", "book", betsBookFilter?.value || "all");
   saveFilter("bets", "result", betsResultFilter?.value || "all");
   saveFilter("bets", "minEdge", betsMinEdgeFilter?.value || "");
@@ -733,7 +971,7 @@ function restoreBetsFilters() {
 }
 
 rangeFilter?.addEventListener("change", () => { saveBetsFilters(); applyFiltersAndRender(); });
-[betsTrackFilter, betsBookFilter, betsResultFilter].forEach((el) => el?.addEventListener("change", () => { saveBetsFilters(); applyFiltersAndRender(); }));
+[betsTrackFilter, betsBookFilter, betsResultFilter, betsMinBackNumberFilter, betsJockeyFilter, betsTrainerFilter].forEach((el) => el?.addEventListener("change", () => { saveBetsFilters(); applyFiltersAndRender(); }));
 [
   betsMinEdgeFilter,
   betsMinOddsFilter,
@@ -746,6 +984,16 @@ rangeFilter?.addEventListener("change", () => { saveBetsFilters(); applyFiltersA
   betsMaxDistanceFilter,
   betsSearchFilter,
 ].forEach((el) => el?.addEventListener("input", () => { saveBetsFilters(); debounceApplyFilters(); }));
+document.querySelectorAll(".pl-period").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".pl-period").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    const p = btn.dataset.period;
+    plPeriodDays = p === "all" ? null : Number(p);
+    renderPLChart(currentBets);
+  });
+});
+
 clearBetsFiltersBtn?.addEventListener("click", clearBetsFilters);
 editBetSave?.addEventListener("click", saveEditModal);
 editBetCancel?.addEventListener("click", closeEditModal);
